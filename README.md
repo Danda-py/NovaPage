@@ -1,6 +1,6 @@
 # 🚀 NovaPage — AI-Powered Mobile Landing Page Builder
 
-**NovaPage** (ex ChatSite) è una piattaforma moderna e AI-native che permette a piccole attività commerciali, reseller e creator di creare e gestire landing page per dispositivi mobili interagendo semplicemente con un assistente virtuale tramite chat.
+**NovaPage** è una piattaforma moderna e AI-native che permette a piccole attività commerciali, reseller e creator di creare e gestire landing page per dispositivi mobili interagendo semplicemente con un assistente virtuale tramite chat.
 
 Invece di utilizzare complicati editor grafici "drag-and-drop", gli utenti possono scrivere o dettare le modifiche in linguaggio naturale (es. *"Aggiungi un pulsante per WhatsApp e imposta lo sfondo scuro con dettagli viola"*). L'IA interpreta la richiesta e aggiorna lo stato visivo della landing page in tempo reale.
 
@@ -47,5 +47,5 @@ NovaPage non genera codice HTML/React grezzo a ogni richiesta (operazione lenta 
 
 ### 1. Clona la repository
 ```bash
-git clone [https://github.com/tuo-username/novapage.git](https://github.com/tuo-username/novapage.git)
+git clone [https://github.com/Danda-py/NovaPage.git](https://github.com/Danda-py/NovaPage.git)
 cd novapage
