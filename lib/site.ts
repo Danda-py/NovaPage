@@ -1,3 +1,5 @@
+import { MAX_HTML, sanitizeHtml, toHtmlFragment } from "./html";
+
 export type BlockType =
   | "hero"
   | "banner"
@@ -111,6 +113,11 @@ export type Site = {
   meta: { title: string; description: string };
   theme: Theme;
   blocks: Block[];
+  /**
+   * HTML libero: se presente, la pagina pubblica mostra questo al posto dei
+   * blocchi. È il modo per costruire una landing senza schema imposto.
+   */
+  html?: string;
   legal?: SiteLegal;
 };
 
@@ -238,6 +245,8 @@ function normalizeData(raw: unknown): BlockData {
     const v = str(d[k]);
     if (v !== undefined) out[k] = v;
   }
+  // Anche le immagini passano dal filtro: un URL non sicuro non deve arrivare al browser.
+  if (out.avatar) out.avatar = safeUrl(out.avatar) || undefined;
   if (Array.isArray(d.buttons)) {
     out.buttons = d.buttons
       .filter((b): b is Record<string, unknown> => !!b && typeof b === "object")
@@ -262,7 +271,7 @@ function normalizeData(raw: unknown): BlockData {
         name: str(p.name) ?? "Prodotto",
         price: str(p.price) ?? "",
         description: str(p.description),
-        image: str(p.image),
+        image: safeUrl(str(p.image)),
         status: str(p.status) ?? "Disponibile",
         compareAtPrice: str(p.compareAtPrice),
         lowestPrice30: str(p.lowestPrice30),
@@ -274,7 +283,7 @@ function normalizeData(raw: unknown): BlockData {
       .slice(0, 8)
       .map((h) => ({ day: str(h.day) ?? "", time: str(h.time) ?? "" }));
   }
-  const images = strList(d.images);
+  const images = strList(d.images)?.map(safeUrl).filter(Boolean);
   if (images) out.images = images;
   if (Array.isArray(d.rows)) {
     out.rows = d.rows
@@ -287,6 +296,76 @@ function normalizeData(raw: unknown): BlockData {
     out.layout = d.layout as BlockLayout;
   }
   return out;
+}
+
+export const MAX_BLOCKS = 40;
+
+/**
+ * HTML libero: documento completo ridotto al solo frammento utile e ripulito da
+ * script, iframe e gestori inline prima di essere salvato.
+ */
+export function normalizeHtml(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const clean = sanitizeHtml(toHtmlFragment(value));
+  return clean ? clean.slice(0, MAX_HTML) : undefined;
+}
+
+/**
+ * Normalizza un intero sito inviato dal client (salvataggio dell'editor):
+ * stessa validazione dell'IA, così il JSON salvato non può contenere blocchi
+ * sconosciuti, URL pericolosi o colori arbitrari.
+ */
+export function normalizeSite(raw: unknown): Site | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.blocks)) return null;
+
+  const theme: Theme = { ...INITIAL_SITE.theme };
+  if (r.theme && typeof r.theme === "object") {
+    const t = r.theme as Record<string, unknown>;
+    for (const key of ["bg_color", "text_color", "accent_color", "accent2"] as const) {
+      const value = t[key];
+      if (typeof value === "string" && HEX.test(value)) theme[key] = value;
+    }
+    if (typeof t.style === "string" && THEME_STYLES.includes(t.style as ThemeStyle)) {
+      theme.style = t.style as ThemeStyle;
+    }
+    if (typeof t.font === "string" && THEME_FONTS.includes(t.font as ThemeFont)) {
+      theme.font = t.font as ThemeFont;
+    }
+  }
+
+  const rawMeta = (r.meta && typeof r.meta === "object" ? r.meta : {}) as Record<string, unknown>;
+  const meta = {
+    title: str(rawMeta.title) ?? "La mia pagina",
+    description: str(rawMeta.description) ?? "",
+  };
+
+  const blocks: Block[] = [];
+  for (const entry of r.blocks.slice(0, MAX_BLOCKS)) {
+    if (!entry || typeof entry !== "object") continue;
+    const o = entry as Record<string, unknown>;
+    const type = o.type as BlockType;
+    if (!BLOCK_TYPES.includes(type)) continue;
+    const blockId = typeof o.id === "string" && o.id.trim() ? o.id.slice(0, 60) : newId("blk");
+    blocks.push({ id: blockId, type, data: { ...DEFAULT_DATA[type], ...normalizeData(o.data) } });
+  }
+
+  const html = normalizeHtml(r.html);
+
+  const rawLegal = (r.legal && typeof r.legal === "object" ? r.legal : null) as Record<
+    string,
+    unknown
+  > | null;
+  const legal: SiteLegal | undefined = rawLegal
+    ? {
+        businessName: str(rawLegal.businessName),
+        vat: str(rawLegal.vat),
+        address: str(rawLegal.address),
+      }
+    : undefined;
+
+  return { meta, theme, blocks, ...(legal ? { legal } : null), ...(html ? { html } : null) };
 }
 
 /** Applies AI tool calls to a copy of the site and returns the new site. Invalid calls are ignored. */
@@ -345,6 +424,15 @@ export function applyToolCalls(site: Site, calls: ToolCall[]): Site {
         break;
       }
       case "set_meta": {
+        const title = str(a.title);
+        const description = str(a.description);
+        if (title) next.meta.title = title;
+        if (description) next.meta.description = description;
+        break;
+      }
+      case "write_html": {
+        const html = normalizeHtml(a.html);
+        if (html) next.html = html;
         const title = str(a.title);
         const description = str(a.description);
         if (title) next.meta.title = title;

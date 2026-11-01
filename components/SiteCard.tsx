@@ -10,6 +10,7 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const clicks = Object.values(site.stats.clicks).reduce((a, b) => a + b, 0);
 
   async function copy() {
@@ -23,6 +24,21 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
     }
   }
 
+  async function duplicate() {
+    setDuplicating(true);
+    const res = await fetch("/api/sites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duplicateOf: site.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.site?.id) {
+      router.push(`/editor/${data.site.id}`);
+      return;
+    }
+    setDuplicating(false);
+  }
+
   async function remove() {
     if (!window.confirm(`Eliminare "${site.config.meta.title}"? L'operazione è definitiva.`)) return;
     setDeleting(true);
@@ -33,15 +49,28 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
 
   return (
     <article className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40">
-      <div className="pointer-events-none h-40 overflow-hidden border-b border-zinc-800 bg-zinc-950">
+      {/* Miniatura non interattiva: nascosta alle tecnologie assistive, così la
+          dashboard non espone due volte titoli e campi del modulo. */}
+      <div
+        className="pointer-events-none h-40 overflow-hidden border-b border-zinc-800 bg-zinc-950"
+        aria-hidden="true"
+        inert
+      >
         <div style={{ transform: "scale(0.34)", transformOrigin: "top left", width: "294%" }}>
-          <SitePreview site={site.config} />
+          <SitePreview site={site.config} preview />
         </div>
       </div>
 
       <div className="space-y-3 p-4">
         <div>
-          <h2 className="truncate text-sm font-semibold">{site.config.meta.title}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <span className="truncate">{site.config.meta.title}</span>
+            {!site.published && (
+              <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-300">
+                bozza
+              </span>
+            )}
+          </h2>
           <p className="truncate text-xs text-zinc-500">/s/{site.slug}</p>
         </div>
 
@@ -64,6 +93,13 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
             className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-zinc-500"
           >
             {copied ? "Copiato ✓" : "Copia link"}
+          </button>
+          <button
+            onClick={duplicate}
+            disabled={duplicating}
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
+          >
+            {duplicating ? "…" : "Duplica"}
           </button>
           <Link
             href={`/sites/${site.id}`}

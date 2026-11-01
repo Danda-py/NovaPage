@@ -146,31 +146,30 @@ function ImageField({
 export function ManualEditor({
   site,
   onChange,
-  selectedBlockId,
-  onSelectedHandled,
+  openId,
+  onOpenChange,
 }: {
   site: Site;
   onChange: (next: Site) => void;
-  selectedBlockId?: string | null;
-  onSelectedHandled?: () => void;
+  openId: string | null;
+  onOpenChange: (blockId: string | null) => void;
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [hexDraft, setHexDraft] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Solo sincronizzazione con il DOM: nessuno stato derivato qui dentro.
   useEffect(() => {
-    if (!selectedBlockId) return;
-    setOpenId(selectedBlockId);
-    onSelectedHandled?.();
-    const el = panelRef.current?.querySelector(`[data-editor-block="${selectedBlockId}"]`);
+    if (!openId) return;
+    const el = panelRef.current?.querySelector(`[data-editor-block="${openId}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       el?.querySelector<HTMLInputElement>("input, textarea")?.focus();
     }, 250);
-  }, [selectedBlockId, onSelectedHandled]);
+    return () => window.clearTimeout(timer);
+  }, [openId]);
 
   function commit(next: Site) {
     onChange(next);
@@ -208,7 +207,7 @@ export function ManualEditor({
     const next = structuredClone(site);
     next.blocks = next.blocks.filter((b) => b.id !== blockId);
     commit(next);
-    if (openId === blockId) setOpenId(null);
+    if (openId === blockId) onOpenChange(null);
   }
 
   function moveTo(fromId: string, toId: string) {
@@ -351,7 +350,7 @@ export function ManualEditor({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setOpenId(open ? null : block.id)}
+                    onClick={() => onOpenChange(open ? null : block.id)}
                     className="min-w-0 flex-1 truncate text-left text-[12.5px] font-medium text-zinc-200"
                     aria-expanded={open}
                   >

@@ -10,7 +10,11 @@ export function Brand({
   className?: string;
 }) {
   return (
-    <Link href={href} className={`flex items-center gap-2 ${className}`} aria-label="NovaPage">
+    <Link
+      href={href}
+      className={`inline-flex min-h-9 items-center gap-2 ${className}`}
+      aria-label="NovaPage"
+    >
       <span className="relative flex h-5 w-5 items-center justify-center">
         <span className="absolute h-5 w-5 rounded-full border border-violet-500/30" />
         <span className="absolute h-2.5 w-2.5 rotate-45 rounded-[2px] bg-violet-500" />

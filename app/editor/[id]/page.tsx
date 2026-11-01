@@ -1,4 +1,5 @@
 export const instant = false;
+export const metadata = { title: "Editor", robots: { index: false, follow: false } };
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getChat, getSite } from "@/lib/store";

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # Valori finti: build e test non aprono connessioni.
+      DATABASE_URL: postgresql://user:password@localhost:5432/novapage
+      AUTH_SECRET: ci-secret-non-reale
+      NEXT_PUBLIC_SITE_URL: https://example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: SEO audit
+        run: |
+          PORT=3111 npm start >/tmp/next.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://localhost:3111/ >/dev/null && break; sleep 1; done
+          node scripts/seo-audit.mjs --base-url=http://localhost:3111

@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
-import { addLead, listLeads } from "@/lib/store";
+import { after, NextResponse } from "next/server";
+import { addLead, deleteLead, findOwnerContact, listLeads } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
+import { emailConfigured, leadNotificationHtml, sendEmail } from "@/lib/email";
+import { siteUrl } from "@/lib/site-url";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -17,6 +19,29 @@ export async function GET(req: Request) {
     );
   }
   return NextResponse.json({ leads: await listLeads(siteId) });
+}
+
+/** Eliminazione di un singolo contatto: è un diritto dell'interessato (GDPR). */
+export async function DELETE(req: Request) {
+  const body = (await req.json().catch(() => null)) as {
+    siteId?: string;
+    leadId?: string;
+  } | null;
+  if (!body?.siteId || !body?.leadId) {
+    return NextResponse.json({ error: "siteId e leadId sono obbligatori" }, { status: 400 });
+  }
+
+  const guard = await requireSite(body.siteId);
+  if (!guard.ok) {
+    return NextResponse.json(
+      { error: guard.reason === "auth" ? "Autenticazione richiesta" : "Sito non trovato" },
+      { status: guard.reason === "auth" ? 401 : 404 },
+    );
+  }
+
+  const deleted = await deleteLead(body.siteId, body.leadId);
+  if (!deleted) return NextResponse.json({ error: "Contatto non trovato" }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }
 
 export async function POST(req: Request) {
@@ -64,6 +89,42 @@ export async function POST(req: Request) {
     message: (body.message ?? "").trim(),
   });
   if (!lead) return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
+
+  // Notifica al titolare dopo la risposta: il visitatore non attende l'invio.
+  const siteId = body.siteId;
+  if (emailConfigured()) {
+    after(async () => {
+      const owner = await findOwnerContact(siteId);
+      if (!owner) return;
+      const at = new Date(lead.createdAt).toLocaleString("it-IT", {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+      await sendEmail({
+        to: owner.email,
+        subject: `Nuovo contatto per "${owner.title}"`,
+        html: leadNotificationHtml({
+          title: owner.title,
+          url: `${siteUrl()}/sites/${siteId}`,
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          message: lead.message,
+          at,
+        }),
+        text: [
+          `Nuovo contatto per ${owner.title} (${at})`,
+          `Nome: ${lead.name || "—"}`,
+          `Email: ${lead.email || "—"}`,
+          `Telefono: ${lead.phone || "—"}`,
+          "",
+          lead.message || "(nessun messaggio)",
+          "",
+          `${siteUrl()}/sites/${siteId}`,
+        ].join("\n"),
+      });
+    });
+  }
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

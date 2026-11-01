@@ -34,13 +34,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "La password deve avere almeno 8 caratteri" }, { status: 400 });
   }
 
-  const { salt, hash } = hashPassword(password);
+  const { salt, hash } = await hashPassword(password);
   const user = await createUser({ email, passwordHash: hash, salt, termsAccepted: true });
   if (!user) {
     return NextResponse.json({ error: "Esiste già un account con questa email" }, { status: 409 });
   }
 
-  await claimLegacySites(user.id);
+  // Assegnazione dei siti creati prima degli account: è una migrazione una-tantum,
+  // non deve assegnare a ogni nuovo iscritto i siti rimasti senza proprietario.
+  if (process.env.CLAIM_LEGACY_SITES === "1") {
+    await claimLegacySites(user.id);
+  }
 
   const res = NextResponse.json({ ok: true, user: { id: user.id, email: user.email } }, { status: 201 });
   res.cookies.set({ ...sessionCookieOptions, value: createSessionToken(user.id, user.sessionVersion) });

@@ -145,7 +145,7 @@ export function LeadForm({ siteId, title, text, accent, textColor, soft, line, r
       </div>
 
       <label
-        className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed"
+        className="mt-3 flex cursor-pointer items-start gap-2.5 py-1 text-[11.5px] leading-relaxed"
         style={{ color: soft }}
       >
         <input
@@ -153,16 +153,17 @@ export function LeadForm({ siteId, title, text, accent, textColor, soft, line, r
           checked={consent}
           onChange={(e) => setConsent(e.target.checked)}
           disabled={preview}
-          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+          className="mt-0.5 h-4 w-4 shrink-0"
           style={{ accentColor: accent }}
         />
         <span>
-          Ho letto l&apos;{" "}
+          Ho letto l&apos;
           <a
             href="/privacy"
             target="_blank"
             rel="noreferrer"
-            style={{ color: textColor, textDecoration: "underline" }}
+            className="underline underline-offset-2"
+            style={{ color: textColor }}
           >
             informativa privacy
           </a>{" "}

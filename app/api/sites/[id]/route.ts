@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteSite, updateSite } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
-import type { Site } from "@/lib/site";
+import { normalizeSite, type Site } from "@/lib/site";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,16 +28,27 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 
   const body = (await req.json().catch(() => null)) as {
-    config?: Site;
-    slug?: string;
-    title?: string;
+    config?: unknown;
+    slug?: unknown;
+    title?: unknown;
+    published?: unknown;
   } | null;
   if (!body) return NextResponse.json({ error: "Richiesta non valida" }, { status: 400 });
 
+  let config: Site | undefined;
+  if (body.config !== undefined) {
+    const normalized = normalizeSite(body.config);
+    if (!normalized) {
+      return NextResponse.json({ error: "Configurazione della pagina non valida" }, { status: 400 });
+    }
+    config = normalized;
+  }
+
   const site = await updateSite(id, {
-    config: body.config && Array.isArray(body.config.blocks) ? body.config : undefined,
-    slug: typeof body.slug === "string" ? body.slug : undefined,
-    title: typeof body.title === "string" ? body.title : undefined,
+    config,
+    slug: typeof body.slug === "string" ? body.slug.slice(0, 60) : undefined,
+    title: typeof body.title === "string" ? body.title.slice(0, 80) : undefined,
+    published: typeof body.published === "boolean" ? body.published : undefined,
   });
   if (!site) return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
   return NextResponse.json({ site });

@@ -7,6 +7,8 @@ import { countUnread, dailyStats, getSite, listLeads } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 import { SiteSettings } from "@/components/SiteSettings";
 import { MarkRead } from "@/components/MarkRead";
+import { DeleteLead } from "@/components/DeleteLead";
+import { siteReadiness } from "@/lib/readiness";
 import { Brand } from "@/components/Brand";
 
 function formatDate(iso: string) {
@@ -31,6 +33,7 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
     countUnread(site.id),
     dailyStats(site.id, 30),
   ]);
+  const readiness = siteReadiness(site.config);
   const clicks = Object.entries(site.stats.clicks).sort((a, b) => b[1] - a[1]);
   const totalClicks = clicks.reduce((sum, [, n]) => sum + n, 0);
   const uniques = site.stats.uniques;
@@ -48,15 +51,27 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
-      <header className="flex h-14 items-center gap-3 border-b border-zinc-800 px-5">
+      <header className="flex h-14 items-center gap-2 border-b border-zinc-800 px-4 sm:gap-3 sm:px-5">
         <Brand showName={false} />
-        <Link href="/dashboard" className="text-xs text-zinc-400 hover:text-zinc-200">
-          ← I miei siti
+        <Link
+          href="/dashboard"
+          aria-label="Torna ai miei siti"
+          className="inline-flex min-h-9 shrink-0 items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+        >
+          <span aria-hidden>←</span>
+          <span className="hidden sm:inline">I miei siti</span>
         </Link>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{site.config.meta.title}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {site.config.meta.title}
+          {!site.published && (
+            <span className="ml-2 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-300">
+              bozza
+            </span>
+          )}
+        </span>
         <Link
           href={`/editor/${site.id}`}
-          className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+          className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-violet-600 px-3 text-xs font-medium text-white hover:bg-violet-500"
         >
           Modifica
         </Link>
@@ -64,14 +79,40 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
 
       <main className="mx-auto max-w-3xl space-y-8 px-5 py-8">
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <SiteSettings siteId={site.id} title={site.config.meta.title} slug={site.slug} />
+          <SiteSettings
+            siteId={site.id}
+            title={site.config.meta.title}
+            slug={site.slug}
+            published={site.published}
+          />
           <Link
             href={`/s/${site.slug}`}
             target="_blank"
-            className="mt-2 inline-block text-xs text-violet-400 hover:underline"
+            className="mt-2 inline-flex min-h-9 items-center text-xs text-violet-400 hover:underline"
           >
             Apri /s/{site.slug} ↗
           </Link>
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
+          <h2 className="text-sm font-semibold">Prima di pubblicare</h2>
+          <ul className="mt-3 space-y-2">
+            {readiness.map((item) => (
+              <li key={item.key} className="flex items-start gap-2 text-[12.5px]">
+                <span className={item.ok ? "text-emerald-400" : "text-amber-400"} aria-hidden>
+                  {item.ok ? "✓" : "•"}
+                </span>
+                <span className="min-w-0 text-zinc-300">
+                  {item.label}
+                  {!item.ok && (
+                    <span className="mt-0.5 block text-[11.5px] leading-relaxed text-zinc-500">
+                      {item.hint}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -139,7 +180,17 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
                 </span>
               )}
             </h2>
-            <MarkRead siteId={site.id} unread={unread} />
+            <div className="flex items-center gap-2">
+              {leads.length > 0 && (
+                <a
+                  href={`/api/leads/export?siteId=${site.id}`}
+                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-[11px] font-medium text-zinc-300 hover:border-zinc-500"
+                >
+                  Esporta CSV
+                </a>
+              )}
+              <MarkRead siteId={site.id} unread={unread} />
+            </div>
           </div>
           {leads.length === 0 ? (
             <p className="mt-2 text-xs text-zinc-500">
@@ -147,7 +198,7 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {leads.map((lead) => (
+              {leads.slice(0, 50).map((lead) => (
                 <li key={lead.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="text-[13.5px] font-medium">
@@ -166,7 +217,10 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
                         </span>
                       )}
                     </p>
-                    <p className="text-[11px] text-zinc-500">{formatDate(lead.createdAt)}</p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-[11px] text-zinc-500">{formatDate(lead.createdAt)}</p>
+                      <DeleteLead siteId={site.id} leadId={lead.id} name={lead.name} />
+                    </div>
                   </div>
                   <p className="mt-1 space-x-3 text-[12px] text-zinc-400">
                     {lead.email && <span>{lead.email}</span>}
@@ -179,6 +233,12 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
                   )}
                 </li>
               ))}
+              {leads.length > 50 && (
+                <li className="px-1 pt-2 text-[11px] leading-relaxed text-zinc-500">
+                  Mostrati i 50 contatti più recenti di {leads.length}. Esporta il CSV per
+                  l&apos;elenco completo.
+                </li>
+              )}
             </ul>
           )}
         </section>

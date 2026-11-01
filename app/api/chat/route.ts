@@ -229,6 +229,27 @@ const FUNCTION_DECLARATIONS = [
     },
   },
   {
+    name: "write_html",
+    description:
+      "Riscrive l'intera pagina in HTML e CSS liberi, senza schema a blocchi. È lo strumento per progettare una landing su misura. Non inserire <script>: viene rimosso.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        html: {
+          type: "STRING",
+          description:
+            "Frammento di body: un <style> iniziale e poi il markup completo della pagina. Responsive, mobile first, massimo 120000 caratteri.",
+        },
+        title: { type: "STRING", description: "Titolo SEO della pagina, massimo 60 caratteri" },
+        description: {
+          type: "STRING",
+          description: "Meta description per Google e per l'anteprima dei link, massimo 160 caratteri",
+        },
+      },
+      required: ["html"],
+    },
+  },
+  {
     name: "set_meta",
     description: "Imposta titolo e descrizione della pagina (SEO e scheda link).",
     parameters: {
@@ -241,10 +262,22 @@ const FUNCTION_DECLARATIONS = [
   },
 ];
 
-const SYSTEM_PROMPT = `Sei Nova, l'assistente che costruisce landing page mobile per piccole attività.
-Usa le funzioni per modificare il sito. Obiettivo: una pagina completa, ordinata e pronta da pubblicare.
+const SYSTEM_PROMPT = `Sei Nova, l'assistente che progetta e costruisce landing page per piccole attività.
+Hai due modi di lavorare: write_html (HTML e CSS liberi, nessuno schema imposto) e i blocchi strutturati. Obiettivo: una pagina completa, ordinata e pronta da pubblicare.
 
-COME COSTRUIRE UNA PAGINA COMPLETA
+HTML LIBERO: LA MODALITÀ PREDEFINITA
+- Per una pagina nuova, un restyling o qualsiasi richiesta che riguardi il design ("una landing moderna", "stile studio legale", "più elegante", "come questa foto"), scrivi la pagina con write_html. Nessun template: decidi tu struttura, gerarchia, tipografia, spaziature e dettagli.
+- Ogni pagina deve essere visivamente diversa dalle altre: due richieste simili non devono produrre lo stesso layout. Cambia griglia, allineamenti, ritmo verticale, uso del colore, forme e dettagli (bordi, ombre, texture, numerazione delle sezioni).
+- Consegna un frammento di body: un <style> iniziale con le variabili in :root, poi il markup. Niente <html>, <head>, <body>; niente <script>, <iframe>, <object>: vengono rimossi.
+- CSS ammesso: flex/grid, clamp() per la tipografia, gradienti, ombre, transizioni e animazioni CSS, filtri, backdrop-filter, pseudo-elementi, ::selection, scroll-snap, media query. Mobile first, max-width intorno a 1100px, target touch da 44px.
+- Font: famiglie di sistema oppure un <link> a Google Fonts. Immagini: solo URL reali forniti dall'utente; altrimenti forme, gradienti e icone SVG disegnate a mano. Niente immagini da URL inventati.
+- L'HTML deve avere senso anche senza CSS: titoli in ordine (h1, poi h2), link veri, testi alt sulle immagini decorative assenti.
+- Chiudi con un footer: dati del titolare se l'utente li ha forniti (ragione sociale, P.IVA, indirizzo) e link a privacy e cookie se esistono.
+- Il primo write_html sostituisce tutto: dopo averlo chiamato rispondi con una o due frasi, non ripetere la pagina.
+- Per modificare un dettaglio di una pagina già in HTML riscrivi il documento completo con write_html (non frammenti parziali).
+- I blocchi restano per le pagine già costruite a blocchi e per le modifiche mirate ("cambia il titolo", "aggiungi gli orari").
+
+PAGINE A BLOCCHI (per i siti già costruiti così)
 - Se l'utente descrive un'attività (bar, negozio, parrucchiere, palestra, freelance, reseller) e la pagina è quasi vuota, costruisci più sezioni in una sola risposta, in questo ordine tipico:
   hero (titolo, sottotitolo, badge) → banner (solo se c'è una promo) → links (i pulsanti richiesti) → catalog (prodotti, servizi o menu) → hours (orari) → gallery (solo con foto reali) → contact.
 - Ogni sezione deve avere contenuti reali. Se un blocco resterebbe vuoto, non aggiungerlo.
@@ -279,7 +312,7 @@ CAPACITÀ DI LAYOUT
 
 ONESTÀ
 - Ogni modifica che annunci deve corrispondere a una chiamata di funzione. Non dire "ho fatto" qualcosa che non hai fatto.
-- Se una richiesta non è realizzabile con queste funzioni, spiegalo in una frase e proponi l'alternativa più vicina invece di fingere.
+- Con write_html puoi realizzare qualsiasi layout: restano fuori solo le funzioni lato server (pagamenti reali, login, aree riservate, invio email automatico). Se servono, dillo in una frase e proponi l'alternativa più vicina.
 
 DATI REALI
 - Non inventare URL, numeri di telefono, WhatsApp, indirizzi o foto.
@@ -376,16 +409,28 @@ export async function POST(req: Request) {
     ? DESIGN_DIRECTIONS[Math.floor(Math.random() * DESIGN_DIRECTIONS.length)]
     : null;
 
+  // L'HTML può essere molto lungo: al modello basta l'inizio, non l'intero documento.
+  const htmlState = record.config.html
+    ? {
+        ...record.config,
+        html: `${record.config.html.slice(0, 4000)}${
+          record.config.html.length > 4000 ? "\n…(troncato)" : ""
+        }`,
+      }
+    : record.config;
+
   const requestText = [
     conversationContext ? `CONTESTO CONVERSAZIONE:\n${conversationContext}` : "",
-    `Stato attuale del sito (JSON):\n${JSON.stringify(record.config)}`,
-    `Sezioni presenti: ${record.config.blocks.map((b) => b.type).join(", ") || "nessuna"}`,
+    `Stato attuale del sito (JSON):\n${JSON.stringify(htmlState)}`,
+    record.config.html
+      ? `La pagina è in HTML libero (${record.config.html.length} caratteri): per modificarla riscrivi il documento completo con write_html.`
+      : `Sezioni presenti: ${record.config.blocks.map((b) => b.type).join(", ") || "nessuna"}`,
     images.length
       ? `IMMAGINI APPENA CARICATE (usale esattamente con questi URL in avatar, gallery o items.image):\n${images.join("\n")}`
       : "",
     `Richiesta: ${message || "Usa queste foto nella pagina nel modo più adatto."}`,
     direction
-      ? `DIREZIONE CREATIVA OBBLIGATORIA PER QUESTA PAGINA:\n- Stile visivo: ${direction.style}, font ${direction.font}\n- Palette: sfondo ${direction.bg}, testo ${direction.text}, accento ${direction.accent}, secondo accento ${direction.accent2}\n- Tono: ${direction.tone}\nChiama update_theme con questi valori e costruisci la pagina con questo carattere. Se l'utente ha indicato colori espliciti, quelli hanno la precedenza.`
+      ? `DIREZIONE CREATIVA OBBLIGATORIA PER QUESTA PAGINA:\n- Stile visivo: ${direction.style}, font ${direction.font}\n- Palette: sfondo ${direction.bg}, testo ${direction.text}, accento ${direction.accent}, secondo accento ${direction.accent2}\n- Tono: ${direction.tone}\nSe scrivi HTML libero usa questa palette nel CSS; se lavori a blocchi chiama update_theme con questi valori. Se l'utente ha indicato colori espliciti, quelli hanno la precedenza.`
       : "",
     colorDirective(message) ?? "",
   ]

@@ -20,7 +20,6 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as {
     siteId?: string;
     label?: string;
-    visitorId?: string;
   } | null;
   if (!body?.siteId) return NextResponse.json({ error: "siteId mancante" }, { status: 400 });
 

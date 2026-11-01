@@ -100,7 +100,10 @@ export function AuthForm({ next }: { next: string }) {
 
       {mode === "login" && (
         <p className="text-right">
-          <a href="/forgot" className="text-[11.5px] text-zinc-500 hover:text-violet-400">
+          <a
+            href="/forgot"
+            className="inline-flex min-h-10 items-center text-xs text-zinc-400 underline-offset-4 hover:text-violet-300 hover:underline"
+          >
             Password dimenticata?
           </a>
         </p>
@@ -114,15 +117,15 @@ export function AuthForm({ next }: { next: string }) {
         {busy ? "…" : mode === "login" ? "Entra" : "Crea account"}
       </button>
 
-      <p className="pt-1 text-center text-[12px] text-zinc-500">
-        {mode === "login" ? "Non hai un account?" : "Hai già un account?"}{" "}
+      <p className="flex flex-wrap items-center justify-center gap-x-1.5 pt-1 text-center text-xs text-zinc-400">
+        {mode === "login" ? "Non hai un account?" : "Hai già un account?"}
         <button
           type="button"
           onClick={() => {
             setMode(mode === "login" ? "register" : "login");
             setError("");
           }}
-          className="font-medium text-violet-400 hover:underline"
+          className="inline-flex min-h-10 items-center px-1 font-medium text-violet-300 underline-offset-4 hover:underline"
         >
           {mode === "login" ? "Registrati" : "Accedi"}
         </button>

@@ -6,10 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke:ai": "node scripts/ai-smoke.mjs"
+    "smoke:ai": "node scripts/ai-smoke.mjs",
+    "db:prune": "node --env-file=.env.local scripts/prune.mjs",
+    "check:env": "node --env-file=.env.production.local scripts/check-env.mjs",
+    "seo:audit": "node scripts/seo-audit.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

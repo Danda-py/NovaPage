@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { AuthForm } from "@/components/AuthForm";
 import { Brand } from "@/components/Brand";
 
+export const metadata = { title: "Accedi", robots: { index: false, follow: false } };
+
 export default async function LoginPage({
   searchParams,
 }: {

@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function DeleteAccount() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -29,7 +31,8 @@ export function DeleteAccount() {
       setBusy(false);
       return;
     }
-    window.location.href = "/";
+    router.push("/");
+    router.refresh();
   }
 
   const field =
@@ -40,7 +43,7 @@ export function DeleteAccount() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-[12px] text-zinc-600 transition-colors hover:text-red-400"
+        className="inline-flex min-h-9 shrink-0 items-center self-start rounded-lg border border-zinc-800 px-3 text-[12px] text-zinc-400 transition-colors hover:border-red-900 hover:text-red-400"
       >
         Elimina account
       </button>

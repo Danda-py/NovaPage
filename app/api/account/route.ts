@@ -13,7 +13,7 @@ export async function DELETE(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { password?: string } | null;
-  if (!body?.password || !verifyPassword(body.password, user.salt, user.passwordHash)) {
+  if (!body?.password || !(await verifyPassword(body.password, user.salt, user.passwordHash))) {
     return NextResponse.json({ error: "Password non corretta" }, { status: 403 });
   }
 

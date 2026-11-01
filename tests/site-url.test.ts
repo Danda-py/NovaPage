@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { requestOrigin, siteUrl } from "@/lib/site-url";
+import { siteUrl } from "@/lib/site-url";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -22,21 +22,5 @@ describe("siteUrl", () => {
     vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
     vi.stubEnv("VERCEL_URL", "");
     expect(siteUrl()).toBe("http://localhost:3000");
-  });
-});
-
-describe("requestOrigin", () => {
-  it("preferisce l'header Origin", () => {
-    const req = new Request("http://localhost/api/auth/forgot", {
-      headers: { origin: "https://aurora.it/" },
-    });
-    expect(requestOrigin(req)).toBe("https://aurora.it");
-  });
-
-  it("ricostruisce l'origine dagli header del proxy", () => {
-    const req = new Request("http://localhost/api/auth/forgot", {
-      headers: { "x-forwarded-host": "novapage.site", "x-forwarded-proto": "https" },
-    });
-    expect(requestOrigin(req)).toBe("https://novapage.site");
   });
 });

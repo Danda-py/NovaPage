@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
+import { jsonLdScript, webPageJsonLd } from "@/lib/seo";
+import { siteUrl } from "@/lib/site-url";
 
 export const metadata = {
   title: "Cookie policy",
   description:
     "Quali cookie usa NovaPage, a cosa serve il cookie di sessione e perché non serve un banner di consenso.",
+  alternates: { canonical: "/cookie" },
 };
 
 const rows = [
@@ -70,10 +73,24 @@ const sections = [
 export default function CookiePage() {
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript(
+            webPageJsonLd({
+              title: "Cookie policy",
+              description:
+                "Quali cookie usa NovaPage, a cosa serve il cookie di sessione e perché non serve un banner di consenso.",
+              path: "/cookie",
+              baseUrl: siteUrl(),
+            }),
+          ),
+        }}
+      />
       <header className="border-b border-zinc-900">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-5">
           <Brand />
-          <Link href="/" className="text-xs text-zinc-400 hover:text-zinc-200">
+          <Link href="/" className="inline-flex min-h-9 items-center text-xs text-zinc-400 hover:text-zinc-200">
             ← Torna al sito
           </Link>
         </div>

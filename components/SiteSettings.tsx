@@ -7,15 +7,20 @@ export function SiteSettings({
   siteId,
   title,
   slug,
+  published,
 }: {
   siteId: string;
   title: string;
   slug: string;
+  published: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(title);
   const [value, setValue] = useState(slug);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [isPublished, setIsPublished] = useState(published);
+  const [toggling, setToggling] = useState(false);
+  const [toggleError, setToggleError] = useState("");
 
   const dirty = name.trim() !== title || value.trim() !== slug;
 
@@ -34,6 +39,25 @@ export function SiteSettings({
     }
     setState("saved");
     router.refresh();
+  }
+
+  async function togglePublished() {
+    if (toggling) return;
+    setToggling(true);
+    const target = !isPublished;
+    const res = await fetch(`/api/sites/${siteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ published: target }),
+    });
+    if (res.ok) {
+      setToggleError("");
+      setIsPublished(target);
+      router.refresh();
+    } else {
+      setToggleError("Aggiornamento non riuscito: riprova.");
+    }
+    setToggling(false);
   }
 
   const input =
@@ -65,6 +89,32 @@ export function SiteSettings({
         {state === "saved" && <span className="text-[11px] text-emerald-400">Salvato</span>}
         {state === "error" && <span className="text-[11px] text-red-400">Controlla i valori</span>}
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-200">
+            {isPublished ? "Pagina pubblicata" : "Pagina in bozza"}
+          </p>
+          <p className="text-[11px] leading-relaxed text-zinc-500">
+            {isPublished
+              ? "Visibile a chi ha il link ed elencata nella sitemap."
+              : "Il link pubblico risponde 404 e la pagina non entra in sitemap."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={togglePublished}
+          disabled={toggling}
+          className={`rounded-lg px-3 py-1.5 text-[11px] font-medium disabled:opacity-50 ${
+            isPublished
+              ? "border border-zinc-700 text-zinc-300 hover:border-zinc-500"
+              : "bg-violet-600 text-white hover:bg-violet-500"
+          }`}
+        >
+          {toggling ? "…" : isPublished ? "Metti in bozza" : "Pubblica"}
+        </button>
+      </div>
+      {toggleError && <p className="text-[11.5px] text-red-400">{toggleError}</p>}
     </form>
   );
 }

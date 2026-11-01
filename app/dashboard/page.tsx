@@ -1,14 +1,15 @@
 export const instant = false;
-import Link from "next/link";
+export const metadata = { title: "I miei siti", robots: { index: false, follow: false } };
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { listLeads, listSites } from "@/lib/store";
+import { listLeadsForOwner, listSites } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 import { SiteCard } from "@/components/SiteCard";
 import { NewSite } from "@/components/NewSite";
 import { LogoutButton } from "@/components/LogoutButton";
 import { Brand } from "@/components/Brand";
 import { DeleteAccount } from "@/components/DeleteAccount";
+import { ChangePassword } from "@/components/ChangePassword";
 
 export default async function Dashboard() {
   await connection();
@@ -16,8 +17,7 @@ export default async function Dashboard() {
   if (!user) redirect("/login");
 
   const sites = await listSites(user.id);
-  const owned = new Set(sites.map((s) => s.id));
-  const leads = (await listLeads()).filter((lead) => owned.has(lead.siteId));
+  const leads = await listLeadsForOwner(user.id);
 
   const leadsBySite = new Map<string, number>();
   const unreadBySite = new Map<string, number>();
@@ -72,12 +72,15 @@ export default async function Dashboard() {
           </div>
         )}
 
-        <section className="mt-12 flex flex-col gap-3 border-t border-zinc-900 pt-6 sm:flex-row sm:items-start sm:justify-between">
-          <p className="text-[11.5px] leading-relaxed text-zinc-600">
-            I dati restano tuoi: puoi cancellare l&apos;account e tutto ciò che contiene in qualsiasi
-            momento.
-          </p>
-          <DeleteAccount />
+        <section className="mt-12 space-y-4 border-t border-zinc-900 pt-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <p className="text-[11.5px] leading-relaxed text-zinc-600">
+              I dati restano tuoi: puoi cancellare l&apos;account e tutto ciò che contiene in qualsiasi
+              momento.
+            </p>
+            <DeleteAccount />
+          </div>
+          <ChangePassword />
         </section>
       </main>
     </div>

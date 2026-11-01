@@ -8,6 +8,9 @@ import { SitePreview } from "@/components/SitePreview";
 import { AskForm } from "@/components/AskForm";
 import { Brand } from "@/components/Brand";
 import { ManualEditor } from "@/components/ManualEditor";
+import { HtmlEditor } from "@/components/HtmlEditor";
+import { CustomPage } from "@/components/CustomPage";
+import { isHtmlPage } from "@/lib/html";
 
 const SUGGESTIONS = [
   "Landing per il mio bar con orari e pulsante WhatsApp",
@@ -48,7 +51,7 @@ export function Editor({
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"chat" | "edit" | "preview">("chat");
+  const [tab, setTab] = useState<"chat" | "edit" | "html" | "preview">("chat");
   const [save, setSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
   const firstRender = useRef(true);
@@ -246,7 +249,7 @@ export function Editor({
               <button
                 key={s}
                 onClick={() => send(s)}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-left text-xs text-zinc-400 transition-colors hover:border-violet-600/60 hover:text-zinc-200"
+                className="min-h-10 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-left text-xs text-zinc-400 transition-colors hover:border-violet-600/60 hover:text-zinc-200"
               >
                 {s}
               </button>
@@ -292,7 +295,7 @@ export function Editor({
           type="button"
           onClick={() => fileInput.current?.click()}
           disabled={uploading || loading}
-          className="rounded-xl border border-zinc-800 px-2.5 py-2.5 text-sm text-zinc-400 hover:border-zinc-600 disabled:opacity-40"
+          className="shrink-0 rounded-xl border border-zinc-800 px-2.5 py-2.5 text-sm text-zinc-400 hover:border-zinc-600 disabled:opacity-40"
           aria-label="Allega foto"
           title="Allega foto"
         >
@@ -302,7 +305,7 @@ export function Editor({
           <button
             type="button"
             onClick={toggleVoice}
-            className={`rounded-xl border px-2.5 py-2.5 text-sm ${
+            className={`shrink-0 rounded-xl border px-2.5 py-2.5 text-sm ${
               listening
                 ? "border-violet-500 bg-violet-500/20 text-violet-300"
                 : "border-zinc-800 text-zinc-400 hover:border-zinc-600"
@@ -322,7 +325,7 @@ export function Editor({
         <button
           type="submit"
           disabled={loading || uploading}
-          className="rounded-xl bg-violet-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-xl bg-violet-600 px-4 text-sm font-medium text-white disabled:opacity-50"
         >
           Invia
         </button>
@@ -332,61 +335,90 @@ export function Editor({
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-950 text-zinc-100">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-zinc-800 px-4">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 px-3 sm:gap-3 sm:px-4">
         <Brand showName={false} />
-        <Link href="/dashboard" className="text-xs text-zinc-400 hover:text-zinc-200">
-          ← I miei siti
+        <Link
+          href="/dashboard"
+          aria-label="Torna ai miei siti"
+          className="inline-flex min-h-9 shrink-0 items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+        >
+          <span aria-hidden>←</span>
+          <span className="hidden sm:inline">I miei siti</span>
         </Link>
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{site.meta.title}</span>
-        <span className="hidden text-[11px] text-zinc-500 sm:block">
-          {save === "saving"
-            ? "Salvo…"
-            : save === "saved"
-              ? "Salvato"
-              : save === "error"
-                ? "Errore salvataggio"
-                : ""}
-        </span>
-        <Link href={`/sites/${siteId}`} className="text-xs text-zinc-400 hover:text-zinc-200">
+        {/* Lo stato del salvataggio serve anche da telefono: prima era nascosto
+            sotto la soglia sm, quindi non si sapeva se le modifiche erano salvate. */}
+        {save !== "idle" && (
+          <span className="flex shrink-0 items-center gap-1.5 text-[10.5px] text-zinc-500" aria-live="polite">
+            <span
+              aria-hidden
+              className={`h-1.5 w-1.5 rounded-full ${
+                save === "error" ? "bg-red-400" : save === "saved" ? "bg-emerald-400" : "bg-amber-400"
+              }`}
+            />
+            {save === "saving" ? "Salvo…" : save === "saved" ? "Salvato" : "Non salvato"}
+          </span>
+        )}
+        <Link
+          href={`/sites/${siteId}`}
+          aria-label="Statistiche della pagina"
+          className="hidden min-h-9 shrink-0 items-center text-xs text-zinc-400 hover:text-zinc-200 sm:inline-flex"
+        >
           Statistiche
         </Link>
         <Link
           href={`/s/${slug}`}
           target="_blank"
-          className="rounded-lg bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-100 hover:bg-zinc-700"
+          className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-zinc-800 px-2.5 text-xs font-medium text-zinc-100 hover:bg-zinc-700"
         >
           Apri
         </Link>
       </header>
 
+      {save === "error" && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center justify-between gap-3 border-b border-red-900/60 bg-red-950/40 px-4 py-2 text-[11.5px] text-red-200"
+        >
+          <span>Le ultime modifiche non sono state salvate.</span>
+          <button
+            type="button"
+            onClick={() => setSite((current) => ({ ...current }))}
+            className="inline-flex min-h-8 items-center rounded-md border border-red-800 px-2.5 font-medium hover:bg-red-900/40"
+          >
+            Riprova
+          </button>
+        </div>
+      )}
+
       <div className="flex border-b border-zinc-800 md:hidden">
-        {(["chat", "edit", "preview"] as const).map((t) => (
+        {(["chat", "edit", "html", "preview"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 text-sm font-medium ${tab === t ? "text-violet-400" : "text-zinc-500"}`}
+            className={`min-h-11 flex-1 text-sm font-medium ${tab === t ? "text-violet-400" : "text-zinc-500"}`}
           >
-            {t === "chat" ? "Chat" : t === "edit" ? "Modifica" : "Anteprima"}
+            {t === "chat" ? "Chat" : t === "edit" ? "Modifica" : t === "html" ? "HTML" : "Anteprima"}
           </button>
         ))}
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
-          className={`${tab === "preview" ? "hidden" : "flex"} min-h-0 flex-1 flex-col md:flex md:max-w-sm md:border-r md:border-zinc-800`}
+          className={`${tab === "preview" ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col md:flex md:max-w-sm md:border-r md:border-zinc-800`}
         >
           <div className="hidden shrink-0 gap-1 border-b border-zinc-800 p-2 md:flex">
-            {(["chat", "edit"] as const).map((t) => (
+            {(["chat", "edit", "html"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`min-h-9 flex-1 rounded-lg px-3 text-xs font-medium transition-colors ${
                   tab === t
                     ? "bg-zinc-800 text-zinc-100"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                {t === "chat" ? "Chat" : "Modifica a mano"}
+                {t === "chat" ? "Chat" : t === "edit" ? "Modifica" : "HTML"}
               </button>
             ))}
           </div>
@@ -396,22 +428,29 @@ export function Editor({
             <ManualEditor
               site={site}
               onChange={setSite}
-              selectedBlockId={selectedBlock}
-              onSelectedHandled={() => setSelectedBlock(null)}
+              openId={selectedBlock}
+              onOpenChange={setSelectedBlock}
             />
+          </div>
+          <div className={`${tab === "html" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
+            <HtmlEditor site={site} onChange={setSite} />
           </div>
         </div>
         <div className={`${tab === "preview" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto md:block`}>
           <div className="mx-auto w-full px-0 py-0 md:max-w-[420px] md:px-6 md:py-8">
             <div className="min-h-full overflow-hidden bg-zinc-950 md:rounded-[2.25rem] md:border md:border-zinc-800 md:shadow-2xl">
-              <SitePreview
-                site={site}
-                selectedBlockId={tab === "edit" ? selectedBlock : null}
-                onSelectBlock={(blockId) => {
-                  setSelectedBlock(blockId);
-                  setTab("edit");
-                }}
-              />
+              {isHtmlPage(site) ? (
+                <CustomPage html={site.html!} siteId={siteId} trackViews={false} />
+              ) : (
+                <SitePreview
+                  site={site}
+                  selectedBlockId={tab === "edit" ? selectedBlock : null}
+                  onSelectBlock={(blockId) => {
+                    setSelectedBlock(blockId);
+                    setTab("edit");
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>

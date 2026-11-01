@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { SitePreview } from "@/components/SitePreview";
 import type { Site } from "@/lib/site";
 
-function track(siteId: string, label?: string, visitorId?: string) {
+function track(siteId: string, label?: string) {
   void fetch("/api/track", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ siteId, label, visitorId }),
+    body: JSON.stringify({ siteId, label }),
   }).catch(() => undefined);
 }
 

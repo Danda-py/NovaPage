@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
+
+/** Titolo dedicato: Next aggiunge già `noindex` alle risposte 404. */
+export const metadata: Metadata = {
+  title: { absolute: "Pagina non trovata · NovaPage" },
+};
 
 export default function NotFound() {
   return (
@@ -11,10 +17,10 @@ export default function NotFound() {
         Il link potrebbe essere stato rimosso, rinominato o non è mai esistito.
       </p>
       <Link
-        href="/dashboard"
-        className="mt-8 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-500"
+        href="/"
+        className="mt-8 rounded-xl bg-violet-600 px-5 py-3 text-sm font-medium text-white hover:bg-violet-500"
       >
-        Torna alle mie landing
+        Torna alla home
       </Link>
     </div>
   );

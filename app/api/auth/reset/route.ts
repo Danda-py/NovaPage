@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Link non valido o scaduto" }, { status: 400 });
   }
 
-  const { salt, hash } = hashPassword(password);
+  const { salt, hash } = await hashPassword(password);
   await updateUserPassword(userId, hash, salt);
 
   return NextResponse.json({ ok: true });

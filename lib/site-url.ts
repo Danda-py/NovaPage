@@ -1,3 +1,8 @@
+/**
+ * URL pubblico del sito. Non va mai dedotto dagli header della richiesta:
+ * l'header Origin è controllato dal chiamante e permetterebbe di dirottare
+ * link inviati per email (reset password).
+ */
 export function siteUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;
   if (explicit) return explicit.replace(/\/$/, "");
@@ -6,15 +11,4 @@ export function siteUrl(): string {
   }
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return "http://localhost:3000";
-}
-
-export function requestOrigin(req: Request): string {
-  const origin = req.headers.get("origin");
-  if (origin) return origin.replace(/\/$/, "");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  if (host) {
-    const proto = req.headers.get("x-forwarded-proto") ?? "https";
-    return `${proto}://${host}`;
-  }
-  return siteUrl();
 }

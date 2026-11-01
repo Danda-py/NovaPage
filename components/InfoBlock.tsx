@@ -48,7 +48,7 @@ export function InfoBlock({ title, rows, accent, textColor, soft, line, radius, 
             <button
               type="button"
               onClick={() => copy(row.value)}
-              className="shrink-0 rounded-lg border px-2.5 py-1 text-[10.5px] font-medium"
+              className="inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 text-[11px] font-medium transition-opacity hover:opacity-80"
               style={{ borderColor: line, color: copied === row.value ? accent : soft }}
             >
               {copied === row.value ? "Copiato ✓" : "Copia"}

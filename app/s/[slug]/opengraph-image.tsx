@@ -8,13 +8,15 @@ export const contentType = "image/png";
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const site = await getSiteBySlug(slug).catch(() => null);
+  // Una bozza non deve esporre il proprio contenuto nell'anteprima social.
+  const source = site?.published ? site.config : null;
 
-  const title = site?.config.meta.title ?? "NovaPage";
-  const description = site?.config.meta.description ?? "";
-  const bg = site?.config.theme.bg_color ?? "#08070f";
-  const text = site?.config.theme.text_color ?? "#f3f0ff";
-  const accent = site?.config.theme.accent_color ?? "#8b5cf6";
-  const accent2 = site?.config.theme.accent2 ?? "#22d3ee";
+  const title = source?.meta.title ?? "NovaPage";
+  const description = source?.meta.description ?? "";
+  const bg = source?.theme.bg_color ?? "#08070f";
+  const text = source?.theme.text_color ?? "#f3f0ff";
+  const accent = source?.theme.accent_color ?? "#8b5cf6";
+  const accent2 = source?.theme.accent2 ?? "#22d3ee";
 
   return new ImageResponse(
     (

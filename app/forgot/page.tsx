@@ -25,7 +25,7 @@ export default function ForgotPage() {
       setState("idle");
       return;
     }
-    setState(data.delivered === false ? "unconfigured" : "sent");
+    setState(data.reason === "unconfigured" ? "unconfigured" : "sent");
   }
 
   const field =
@@ -36,7 +36,7 @@ export default function ForgotPage() {
       <header className="border-b border-zinc-900">
         <div className="mx-auto flex h-14 max-w-md items-center justify-between px-5">
           <Brand />
-          <Link href="/login" className="text-xs text-zinc-400 hover:text-zinc-200">
+          <Link href="/login" className="inline-flex min-h-9 items-center text-xs text-zinc-400 hover:text-zinc-200">
             ← Accedi
           </Link>
         </div>

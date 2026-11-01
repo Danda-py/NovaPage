@@ -52,3 +52,44 @@ export function resetEmailHtml(link: string): string {
   <p style="font-size:12px;color:#52525b;margin:24px 0 0">${link}</p>
 </div>`;
 }
+
+/** I dati dei visitatori finiscono in una email: vanno sempre neutralizzati. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Email al titolare della pagina quando il modulo contatti riceve un messaggio. */
+export function leadNotificationHtml(input: {
+  title: string;
+  url: string;
+  name: string;
+  email: string;
+  phone: string;
+  message: string;
+  at: string;
+}): string {
+  const rows = [
+    ["Nome", input.name || "—"],
+    ["Email", input.email || "—"],
+    ["Telefono", input.phone || "—"],
+    ["Ricevuto", input.at],
+  ]
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:6px 0;font-size:12px;color:#71717a;width:90px">${escapeHtml(label)}</td><td style="padding:6px 0;font-size:14px;color:#e4e4e7">${escapeHtml(value)}</td></tr>`,
+    )
+    .join("");
+
+  return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
+  <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">NovaPage</p>
+  <h1 style="font-size:20px;margin:0 0 12px">Nuovo contatto da ${escapeHtml(input.title)}</h1>
+  <table style="width:100%;border-collapse:collapse;margin:0 0 16px">${rows}</table>
+  <div style="border-top:1px solid #27272a;padding-top:12px;font-size:14px;line-height:1.6;color:#a1a1aa;white-space:pre-wrap">${escapeHtml(input.message || "(nessun messaggio)")}</div>
+  <a href="${escapeHtml(input.url)}" style="display:inline-block;margin-top:24px;background:#8b5cf6;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-size:14px;font-weight:600">Apri i contatti</a>
+</div>`;
+}

@@ -55,13 +55,14 @@ describe("sessioni", () => {
 });
 
 describe("password", () => {
-  it("verifica la password corretta e rifiuta quella sbagliata", () => {
-    const { salt, hash } = hashPassword("password-robusta");
-    expect(verifyPassword("password-robusta", salt, hash)).toBe(true);
-    expect(verifyPassword("password-sbagliata", salt, hash)).toBe(false);
+  it("verifica la password corretta e rifiuta quella sbagliata", async () => {
+    const { salt, hash } = await hashPassword("password-robusta");
+    expect(await verifyPassword("password-robusta", salt, hash)).toBe(true);
+    expect(await verifyPassword("password-sbagliata", salt, hash)).toBe(false);
   });
 
-  it("genera hash diversi per password uguali", () => {
-    expect(hashPassword("stessa-password").hash).not.toBe(hashPassword("stessa-password").hash);
+  it("genera hash diversi per password uguali", async () => {
+    const [a, b] = await Promise.all([hashPassword("stessa-password"), hashPassword("stessa-password")]);
+    expect(a.hash).not.toBe(b.hash);
   });
 });

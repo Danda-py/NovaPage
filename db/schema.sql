@@ -17,11 +17,17 @@ create table if not exists sites (
   owner_id   text references users(id) on delete cascade,
   slug       text unique not null,
   config     jsonb not null default '{}'::jsonb,
+  published  boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- `create table if not exists` non tocca una tabella già esistente: le colonne
+-- aggiunte dopo la prima versione vanno garantite anche sui database in uso.
+alter table sites add column if not exists published boolean not null default true;
+
 create index if not exists sites_owner_idx on sites(owner_id);
+create index if not exists sites_published_idx on sites(published, updated_at desc);
 
 create table if not exists leads (
   id         text primary key,

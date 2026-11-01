@@ -2,17 +2,42 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { siteUrl } from "@/lib/site-url";
 
+const TITLE = "NovaPage — landing page per la tua attività, create in chat";
+const DESCRIPTION =
+  "Crea la landing page della tua attività parlando con un assistente AI: testi, colori, contatti e statistiche. Online in un minuto, con un link da condividere.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: { default: "NovaPage", template: "%s · NovaPage" },
-  description: "Crea la tua landing page mobile con una chat.",
+  title: { default: TITLE, template: "%s · NovaPage" },
+  description: DESCRIPTION,
   applicationName: "NovaPage",
+  category: "technology",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
+  formatDetection: { telephone: false, email: false, address: false },
   openGraph: {
     siteName: "NovaPage",
     locale: "it_IT",
     type: "website",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
   },
 };
 

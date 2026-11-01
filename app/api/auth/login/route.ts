@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const user = await findUserByEmail(email);
-  if (!user || !verifyPassword(password, user.salt, user.passwordHash)) {
+  if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
     return NextResponse.json({ error: "Email o password non corretti" }, { status: 401 });
   }
 

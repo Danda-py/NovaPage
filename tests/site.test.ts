@@ -3,6 +3,7 @@ import {
   INITIAL_SITE,
   applyToolCalls,
   normalizeAsk,
+  normalizeSite,
   type Site,
 } from "@/lib/site";
 
@@ -46,6 +47,57 @@ describe("normalizeAsk", () => {
       fields: Array.from({ length: 9 }, (_, i) => ({ label: `Campo ${i}` })),
     });
     expect(ask?.fields).toHaveLength(6);
+  });
+});
+
+describe("normalizeSite", () => {
+  it("rifiuta un payload senza blocchi", () => {
+    expect(normalizeSite(null)).toBeNull();
+    expect(normalizeSite({ theme: {} })).toBeNull();
+    expect(normalizeSite({ blocks: "niente" })).toBeNull();
+  });
+
+  it("scarta blocchi sconosciuti e valori di tema non validi", () => {
+    const site = normalizeSite({
+      meta: { title: "Bar Aurora", description: "Caffè e brioche" },
+      theme: { bg_color: "#000000", accent_color: "rosso", style: "neon", font: "serif" },
+      blocks: [
+        { id: "b1", type: "hero", data: { title: "Ciao" } },
+        { id: "b2", type: "sconosciuto", data: {} },
+      ],
+      legal: { vat: "IT01234567890" },
+    });
+
+    expect(site).not.toBeNull();
+    expect(site?.blocks).toHaveLength(1);
+    expect(site?.blocks[0].type).toBe("hero");
+    expect(site?.theme.bg_color).toBe("#000000");
+    expect(site?.theme.accent_color).toBe(INITIAL_SITE.theme.accent_color);
+    expect(site?.theme.style).toBe("neon");
+    expect(site?.theme.font).toBe("serif");
+    expect(site?.legal?.vat).toBe("IT01234567890");
+  });
+
+  it("blocca i link javascript: e mantiene quelli relativi", () => {
+    const site = normalizeSite({
+      meta: { title: "Link" },
+      blocks: [
+        {
+          id: "b1",
+          type: "links",
+          data: {
+            buttons: [
+              { label: "Malevolo", url: "javascript:alert(1)" },
+              { label: "Upload", url: "/uploads/foto.png" },
+            ],
+          },
+        },
+      ],
+    });
+
+    const buttons = site?.blocks[0].data.buttons ?? [];
+    expect(buttons[0].url).toBe("");
+    expect(buttons[1].url).toBe("/uploads/foto.png");
   });
 });
 

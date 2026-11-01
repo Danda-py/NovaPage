@@ -13,6 +13,22 @@ function isUsableUrl(url: string): boolean {
   return /^(https?:\/\/|\/|mailto:|tel:|data:image\/)/.test(url);
 }
 
+/**
+ * "Disponibile" è il valore riempito automaticamente quando manca un'informazione:
+ * mostrarlo accanto a ogni prezzo è rumore. Si mostra solo uno stato che dice
+ * qualcosa (esaurito, ultimi pezzi, su ordinazione).
+ */
+function meaningfulStatus(status?: string): string | null {
+  const value = status?.trim();
+  if (!value) return null;
+  if (/^(disponibile|disponibili|available|in stock|in pronta consegna)$/i.test(value)) return null;
+  return value;
+}
+
+function initials(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || "·";
+}
+
 const ICONS: Record<ButtonIcon, React.ReactNode> = {
   pdf: (
     <>
@@ -122,11 +138,14 @@ export function SitePreview({
   siteId,
   onSelectBlock,
   selectedBlockId,
+  preview = !siteId,
 }: {
   site: Site;
   siteId?: string;
   onSelectBlock?: (blockId: string) => void;
   selectedBlockId?: string | null;
+  /** In anteprima si mostrano anche i segnaposto (link da collegare, modulo demo). */
+  preview?: boolean;
 }) {
   const t = site.theme;
   const k = tokens(t);
@@ -187,10 +206,10 @@ export function SitePreview({
               >
                 Modifica
               </span>
-              <BlockView block={block} theme={t} k={k} siteId={siteId} />
+              <BlockView block={block} theme={t} k={k} siteId={siteId} preview={preview} />
             </div>
           ) : (
-            <BlockView key={block.id} block={block} theme={t} k={k} siteId={siteId} />
+            <BlockView key={block.id} block={block} theme={t} k={k} siteId={siteId} preview={preview} />
           ),
         )}
 
@@ -253,11 +272,13 @@ function BlockView({
   theme: t,
   k,
   siteId,
+  preview,
 }: {
   block: Block;
   theme: Theme;
   k: Tokens;
   siteId?: string;
+  preview: boolean;
 }) {
   const d: BlockData = block.data;
   const card = {
@@ -397,25 +418,10 @@ function BlockView({
       const row = (b: LinkButton, i: number) => {
         const custom = b.color && /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : null;
         const accent = custom ?? t.accent_color;
-        if (k.editorial) {
-          return (
-            <a
-              key={i}
-              href={isUsableUrl(b.url) ? b.url : undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between gap-3 py-3.5 text-[13.5px] font-medium"
-              style={{ borderBottom: k.hairline, color: isUsableUrl(b.url) ? t.text_color : k.soft }}
-            >
-              <span className="flex items-center gap-2.5">
-                <Icon name={b.icon} />
-                {b.label}
-              </span>
-              <span style={{ color: accent }}>{isUsableUrl(b.url) ? "→" : "da configurare"}</span>
-            </a>
-          );
-        }
+        // Un pulsante senza destinazione non va mostrato ai visitatori: in
+        // anteprima resta visibile come segnaposto per poterlo collegare.
         if (!isUsableUrl(b.url)) {
+          if (!preview) return null;
           return (
             <div
               key={i}
@@ -425,6 +431,26 @@ function BlockView({
               {b.label}
               <span className="mt-0.5 block text-[10.5px] font-normal opacity-70">link da configurare</span>
             </div>
+          );
+        }
+        if (k.editorial) {
+          return (
+            <a
+              key={i}
+              href={isUsableUrl(b.url) ? b.url : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between gap-3 py-3.5 text-[13.5px] font-medium"
+              style={{ borderBottom: k.hairline, color: t.text_color }}
+            >
+              <span className="flex items-center gap-2.5">
+                <Icon name={b.icon} />
+                {b.label}
+              </span>
+              <span aria-hidden style={{ color: accent }}>
+                →
+              </span>
+            </a>
           );
         }
         const ghost = b.variant === "ghost";
@@ -482,10 +508,17 @@ function BlockView({
                     <img src={p.image} alt={p.name} className="h-14 w-14 shrink-0 object-cover" style={{ borderRadius: "6px" }} />
                   ) : (
                     <div
-                      className="flex h-14 w-14 shrink-0 items-center justify-center text-lg"
-                      style={{ borderRadius: "6px", border: k.hairline, color: k.soft }}
+                      className="flex h-14 w-14 shrink-0 items-center justify-center text-[15px] font-semibold"
+                      style={{
+                        borderRadius: "6px",
+                        border: k.hairline,
+                        color: alpha(t.text_color, 0.6),
+                        backgroundColor: k.faint,
+                        fontFamily: k.serif ? FONTS.serif : undefined,
+                      }}
+                      aria-hidden
                     >
-                      ◇
+                      {initials(p.name)}
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
@@ -495,9 +528,11 @@ function BlockView({
                         {p.description}
                       </p>
                     )}
-                    <p className="text-[11.5px]" style={{ color: k.soft }}>
-                      {p.status}
-                    </p>
+                    {meaningfulStatus(p.status) && (
+                      <p className="text-[11.5px]" style={{ color: k.soft }}>
+                        {meaningfulStatus(p.status)}
+                      </p>
+                    )}
                   </div>
                   {p.price && (
                     <div className="shrink-0 text-right">
@@ -535,11 +570,14 @@ function BlockView({
                       className="flex aspect-square w-full items-center justify-center"
                       style={{
                         backgroundImage: `linear-gradient(150deg, ${alpha(t.accent_color, 0.22)}, ${alpha(t.accent2, 0.12)})`,
-                        color: alpha(t.text_color, 0.55),
-                        fontSize: "1.6rem",
+                        color: alpha(t.text_color, 0.6),
+                        fontSize: "1.7rem",
+                        fontWeight: k.serif ? 500 : 700,
+                        fontFamily: k.serif ? FONTS.serif : undefined,
                       }}
+                      aria-hidden
                     >
-                      ◇
+                      {initials(p.name)}
                     </div>
                   )}
                   <div className="space-y-1.5 p-3">
@@ -575,7 +613,7 @@ function BlockView({
                           )}
                         </span>
                       )}
-                      {p.status && (
+                      {meaningfulStatus(p.status) && (
                         <span
                           className="px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide"
                           style={{
@@ -584,7 +622,7 @@ function BlockView({
                             color: soldOut ? "#fca5a5" : "#86efac",
                           }}
                         >
-                          {p.status}
+                          {meaningfulStatus(p.status)}
                         </span>
                       )}
                     </div>

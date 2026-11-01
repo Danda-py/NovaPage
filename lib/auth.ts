@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { cookies } from "next/headers";
@@ -26,13 +26,29 @@ function getSecret(): string {
   return generated;
 }
 
-export function hashPassword(password: string, salt = randomBytes(16).toString("hex")) {
-  return { salt, hash: scryptSync(password, salt, 64).toString("hex") };
+/**
+ * scrypt asincrono: la versione sincrona blocca l'event loop per ~300 ms a ogni
+ * login, registrazione o reset, serializzando le altre richieste dell'istanza.
+ */
+function derive(password: string, salt: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, 64, (error, key) => (error ? reject(error) : resolve(key)));
+  });
 }
 
-export function verifyPassword(password: string, salt: string, hash: string): boolean {
-  const candidate = Buffer.from(scryptSync(password, salt, 64).toString("hex"));
-  const expected = Buffer.from(hash);
+export async function hashPassword(
+  password: string,
+  salt = randomBytes(16).toString("hex"),
+): Promise<{ salt: string; hash: string }> {
+  const key = await derive(password, salt);
+  return { salt, hash: key.toString("hex") };
+}
+
+export async function verifyPassword(password: string, salt: string, hash: string): Promise<boolean> {
+  const candidate = await derive(password, salt);
+  // L'hash è salvato in esadecimale: va decodificato, altrimenti si confrontano
+  // 64 byte di chiave con 128 byte di testo e la verifica fallisce sempre.
+  const expected = Buffer.from(hash, "hex");
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 

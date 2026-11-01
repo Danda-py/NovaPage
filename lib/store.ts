@@ -1,5 +1,5 @@
 import { db } from "./db";
-import type { Ask, Site } from "./site";
+import { newId, type Ask, type Site } from "./site";
 
 export type ChatMessage = {
   id: string;
@@ -32,6 +32,8 @@ export type StoredSite = {
   id: string;
   ownerId?: string;
   slug: string;
+  /** false = bozza: link pubblico 404 e pagina esclusa dalla sitemap. */
+  published: boolean;
   config: Site;
   createdAt: string;
   updatedAt: string;
@@ -54,8 +56,19 @@ export type Lead = {
 
 const MAX_CHAT = 300;
 
+/** Web Crypto: niente `node:crypto`, che non esiste nel bundle Edge di instrumentation. */
 function id(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
+/** Violazione di vincolo unique di Postgres (23505). */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "23505"
+  );
 }
 
 export function slugify(text: string): string {
@@ -74,6 +87,7 @@ type SiteRow = {
   id: string;
   owner_id: string | null;
   slug: string;
+  published: boolean | null;
   config: Site;
   created_at: string | Date;
   updated_at: string | Date;
@@ -122,6 +136,7 @@ function mapSite(row: SiteRow): StoredSite {
     id: row.id,
     ownerId: row.owner_id ?? undefined,
     slug: row.slug,
+    published: row.published ?? true,
     config: row.config,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -223,9 +238,7 @@ export async function getSiteBySlug(slug: string): Promise<StoredSite | null> {
 }
 
 export async function createSite(ownerId: string, title: string): Promise<StoredSite> {
-  const sql = db();
   const clean = title.trim().slice(0, 60) || "La mia pagina";
-  const slug = await uniqueSlug(slugify(clean));
   const config = {
     meta: { title: clean, description: "Pagina creata con NovaPage" },
     theme: {
@@ -249,22 +262,54 @@ export async function createSite(ownerId: string, title: string): Promise<Stored
     ],
   } satisfies Site;
 
-  const rows = (await sql`
-    insert into sites (id, owner_id, slug, config)
-    values (${id("site")}, ${ownerId}, ${slug}, ${JSON.stringify(config)}::jsonb)
-    returning id
-  `) as Array<{ id: string }>;
+  return insertSite(ownerId, config, clean);
+}
 
-  return (await getSite(rows[0].id))!;
+/** Inserimento con slug unico e retry: due creazioni simultanee possono scegliere lo stesso slug. */
+async function insertSite(ownerId: string, config: Site, title: string): Promise<StoredSite> {
+  const sql = db();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const slug = await uniqueSlug(slugify(title));
+    try {
+      const rows = (await sql`
+        insert into sites (id, owner_id, slug, config)
+        values (${id("site")}, ${ownerId}, ${slug}, ${JSON.stringify(config)}::jsonb)
+        returning id
+      `) as Array<{ id: string }>;
+
+      return (await getSite(rows[0].id))!;
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+    }
+  }
+
+  throw new Error("Impossibile creare la pagina: riprova.");
+}
+
+/** Copia una pagina dell'utente con nuovi id dei blocchi e slug derivato dal titolo. */
+export async function duplicateSite(siteId: string, ownerId: string): Promise<StoredSite | null> {
+  const source = await getSite(siteId);
+  if (!source || source.ownerId !== ownerId) return null;
+
+  const title = `${source.config.meta.title} (copia)`.slice(0, 60);
+  const config: Site = {
+    ...structuredClone(source.config),
+    meta: { ...source.config.meta, title },
+    blocks: source.config.blocks.map((block) => ({ ...block, id: newId("blk") })),
+  };
+
+  return insertSite(ownerId, config, title);
 }
 
 export async function updateSite(
   siteId: string,
-  patch: { config?: Site; slug?: string; title?: string },
+  patch: { config?: Site; slug?: string; title?: string; published?: boolean },
 ): Promise<StoredSite | null> {
   const sql = db();
-  const existing = await getSite(siteId);
-  if (!existing) return null;
+  // Verifica leggera: la lettura completa del sito include gli aggregati di
+  // analytics e non serve solo per capire se il sito esiste.
+  const exists = (await sql`select id from sites where id = ${siteId} limit 1`) as Array<{ id: string }>;
+  if (!exists.length) return null;
 
   if (patch.config && Array.isArray(patch.config.blocks)) {
     await sql`update sites set config = ${JSON.stringify(patch.config)}::jsonb, updated_at = now() where id = ${siteId}`;
@@ -279,6 +324,11 @@ export async function updateSite(
       update sites
       set config = jsonb_set(config, '{meta,title}', to_jsonb(${title}::text)), updated_at = now()
       where id = ${siteId}
+    `;
+  }
+  if (typeof patch.published === "boolean") {
+    await sql`
+      update sites set published = ${patch.published}, updated_at = now() where id = ${siteId}
     `;
   }
   return getSite(siteId);
@@ -351,12 +401,32 @@ export async function addLead(
   return mapLead(rows[0]);
 }
 
-export async function listLeads(siteId?: string): Promise<Lead[]> {
+export async function listLeads(siteId: string): Promise<Lead[]> {
   const sql = db();
-  const rows = (siteId
-    ? await sql`select * from leads where site_id = ${siteId} order by created_at desc`
-    : await sql`select * from leads order by created_at desc`) as LeadRow[];
+  const rows = (await sql`
+    select * from leads where site_id = ${siteId} order by created_at desc
+  `) as LeadRow[];
   return rows.map(mapLead);
+}
+
+/** Solo i contatti dei siti dell'utente: nessun dato di altri account. */
+export async function listLeadsForOwner(ownerId: string): Promise<Lead[]> {
+  const sql = db();
+  const rows = (await sql`
+    select l.* from leads l
+    join sites s on s.id = l.site_id
+    where s.owner_id = ${ownerId}
+    order by l.created_at desc
+  `) as LeadRow[];
+  return rows.map(mapLead);
+}
+
+export async function deleteLead(siteId: string, leadId: string): Promise<boolean> {
+  const sql = db();
+  const rows = (await sql`
+    delete from leads where id = ${leadId} and site_id = ${siteId} returning id
+  `) as Array<{ id: string }>;
+  return rows.length > 0;
 }
 
 export async function markLeadsRead(siteId: string): Promise<number> {
@@ -367,12 +437,42 @@ export async function markLeadsRead(siteId: string): Promise<number> {
   return rows.length;
 }
 
-export async function countUnread(siteId?: string): Promise<number> {
+export async function countUnread(siteId: string): Promise<number> {
   const sql = db();
-  const rows = (siteId
-    ? await sql`select count(*)::int as n from leads where site_id = ${siteId} and read = false`
-    : await sql`select count(*)::int as n from leads where read = false`) as Array<{ n: number }>;
+  const rows = (await sql`
+    select count(*)::int as n from leads where site_id = ${siteId} and read = false
+  `) as Array<{ n: number }>;
   return rows[0]?.n ?? 0;
+}
+
+/**
+ * Verifica che la migrazione v3 (colonna `published`) sia stata applicata.
+ * Serve a non pubblicare un deploy che sembra sano ma non può salvare lo stato
+ * di pubblicazione né elencare le landing in sitemap.
+ */
+export async function schemaReady(): Promise<boolean> {
+  try {
+    const sql = db();
+    const rows = (await sql`
+      select 1 from information_schema.columns
+      where table_name = 'sites' and column_name = 'published'
+      limit 1
+    `) as unknown[];
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Ping leggero per l'health check: non espone nulla del contenuto del database. */
+export async function pingDatabase(): Promise<boolean> {
+  try {
+    const sql = db();
+    await sql`select 1`;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function getChat(siteId: string): Promise<ChatMessage[]> {
@@ -448,6 +548,21 @@ export async function findUserByEmail(email: string): Promise<User | null> {
     select * from users where email = ${email.toLowerCase().trim()} limit 1
   `) as UserRow[];
   return rows[0] ? mapUser(rows[0]) : null;
+}
+
+/** Email del titolare e dati minimi della pagina, per le notifiche ai contatti. */
+export async function findOwnerContact(
+  siteId: string,
+): Promise<{ email: string; slug: string; title: string } | null> {
+  const sql = db();
+  const rows = (await sql`
+    select u.email, s.slug, coalesce(s.config->'meta'->>'title', s.slug) as title
+    from sites s
+    join users u on u.id = s.owner_id
+    where s.id = ${siteId}
+    limit 1
+  `) as Array<{ email: string; slug: string; title: string }>;
+  return rows[0] ?? null;
 }
 
 export async function findUserById(userId: string): Promise<User | null> {
@@ -551,13 +666,25 @@ export async function listPublishedSites(): Promise<
   Array<{ slug: string; title: string; description: string; updatedAt: string }>
 > {
   const sql = db();
+  // Estraiamo solo i campi della scheda link: la sitemap non deve caricare i config interi.
   const rows = (await sql`
-    select slug, config, updated_at from sites order by updated_at desc limit 5000
-  `) as Array<{ slug: string; config: Site; updated_at: string | Date }>;
+    select slug,
+           config->'meta'->>'title' as title,
+           config->'meta'->>'description' as description,
+           updated_at
+    from sites
+    where published = true
+    order by updated_at desc limit 5000
+  `) as Array<{
+    slug: string;
+    title: string | null;
+    description: string | null;
+    updated_at: string | Date;
+  }>;
   return rows.map((row) => ({
     slug: row.slug,
-    title: row.config.meta?.title ?? row.slug,
-    description: row.config.meta?.description ?? "",
+    title: row.title ?? row.slug,
+    description: row.description ?? "",
     updatedAt: iso(row.updated_at),
   }));
 }

@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
+import { jsonLdScript, webPageJsonLd } from "@/lib/seo";
+import { siteUrl } from "@/lib/site-url";
 
 export const metadata = {
   title: "Informativa privacy",
   description: "Quali dati raccoglie NovaPage, perché, per quanto tempo e come esercitare i tuoi diritti.",
+  alternates: { canonical: "/privacy" },
 };
 
 const sections = [
@@ -59,7 +62,7 @@ const sections = [
     title: "Cookie",
     body: [
       "NovaPage usa un solo cookie tecnico, necessario a mantenere la sessione di accesso: è HttpOnly, non contiene dati personali, non viene usato per profilazione e non richiede consenso.",
-      "Non usiamo Google Analytics né altri strumenti di tracciamento di terze parti e non salviamo identificativi sul dispositivo dei visitatori delle pagine pubblicate: le visite uniche sono contate con un'impronta hash giornaliera lato server.",
+      "Non usiamo Google Analytics né altri strumenti di tracciamento di terze parti. Nelle pagine pubblicate salviamo solo un segnalibro di sessione nel browser (sessionStorage) che evita di contare due volte la stessa visita nella stessa scheda: si cancella alla chiusura e non identifica la persona. Le visite uniche sono contate lato server con un'impronta hash giornaliera del solo indirizzo IP, che non viene conservato.",
     ],
   },
 ];
@@ -67,10 +70,23 @@ const sections = [
 export default function PrivacyPage() {
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript(
+            webPageJsonLd({
+              title: "Informativa privacy",
+              description: "Quali dati raccoglie NovaPage, perché, per quanto tempo e come esercitare i tuoi diritti.",
+              path: "/privacy",
+              baseUrl: siteUrl(),
+            }),
+          ),
+        }}
+      />
       <header className="border-b border-zinc-900">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-5">
           <Brand />
-          <Link href="/" className="text-xs text-zinc-400 hover:text-zinc-200">
+          <Link href="/" className="inline-flex min-h-9 items-center text-xs text-zinc-400 hover:text-zinc-200">
             ← Torna al sito
           </Link>
         </div>

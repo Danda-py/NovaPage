@@ -12,7 +12,7 @@ export function LogoutButton() {
         router.replace("/login");
         router.refresh();
       }}
-      className="text-xs text-zinc-500 hover:text-zinc-300"
+      className="inline-flex min-h-9 items-center rounded-lg border border-zinc-800 px-3 text-xs text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white"
     >
       Esci
     </button>

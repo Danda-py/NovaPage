@@ -1,7 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SitePreview } from "@/components/SitePreview";
 import { Brand } from "@/components/Brand";
 import type { Site } from "@/lib/site";
+import { homeJsonLd, jsonLdScript } from "@/lib/seo";
+import { siteUrl } from "@/lib/site-url";
+
+export const metadata: Metadata = {
+  title: "NovaPage — landing page della tua attività, creata in chat",
+  description:
+    "Descrivi l'attività e NovaPage costruisce la landing con testi, colori, orari e contatti. Link pubblico pronto per la bio. Beta gratuita.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "NovaPage — la landing page della tua attività, scritta in chat",
+    description:
+      "Descrivi l'attività e NovaPage costruisce la landing: testi, colori, orari, contatti, modulo e statistiche. Beta gratuita.",
+    url: "/",
+    type: "website",
+  },
+};
 
 const demo: Site = {
   meta: { title: "Studio Aurora", description: "Identità visiva e contenuti per brand indipendenti" },
@@ -89,20 +106,60 @@ const audiences = [
   { title: "Creator e freelance", text: "Link-in-bio, servizi e raccolta contatti in un'unica pagina curata." },
 ];
 
+const FAQ = [
+  {
+    question: "Quanto costa NovaPage?",
+    answer:
+      "La beta è gratuita: crei la pagina, la pubblichi su un link e raccogli contatti senza carta di credito.",
+  },
+  {
+    question: "Serve saper usare un editor?",
+    answer:
+      "No. Descrivi l'attività in chat o con la dettatura e l'assistente prepara le sezioni; il pannello «Modifica a mano» resta disponibile per ritocchi precisi a testi, colori e foto.",
+  },
+  {
+    question: "La pagina è ottimizzata per Google?",
+    answer:
+      "Sì. Ogni landing ha titolo e descrizione modificabili, URL canonico, immagine di anteprima per i social, dati strutturati schema.org con contatti, orari e prodotti, e una voce in sitemap quando è pubblicata.",
+  },
+  {
+    question: "Posso usare le mie foto e il mio logo?",
+    answer:
+      "Sì: carichi immagini dalla chat o dall'editor e finiscono in galleria, scheda prodotto o foto profilo, ottimizzate per la visualizzazione mobile.",
+  },
+  {
+    question: "Come arrivano i contatti dei clienti?",
+    answer:
+      "Il modulo salva nome, email, telefono e messaggio con la data del consenso. Ogni nuovo contatto ti arriva anche via email, puoi esportarli in CSV ed eliminarli singolarmente.",
+  },
+  {
+    question: "Posso nascondere la pagina mentre la preparo?",
+    answer:
+      "Sì: mettila in bozza dalla pagina statistiche. Il link pubblico risponde 404, la pagina non entra in sitemap e non viene indicizzata.",
+  },
+];
+
 export default function Landing() {
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript(homeJsonLd({ baseUrl: siteUrl(), faq: FAQ })),
+        }}
+      />
       <header className="sticky top-0 z-20 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
           <Brand />
-          <nav className="hidden items-center gap-6 text-sm text-zinc-400 sm:flex">
-            <a href="#funzioni" className="hover:text-zinc-100">Funzioni</a>
-            <a href="#come" className="hover:text-zinc-100">Come funziona</a>
-            <a href="#per-chi" className="hover:text-zinc-100">Per chi</a>
+          <nav aria-label="Sezioni della pagina" className="hidden items-center gap-5 text-sm text-zinc-400 sm:flex">
+            <a href="#funzioni" className="inline-flex min-h-10 items-center hover:text-zinc-100">Funzioni</a>
+            <a href="#come" className="inline-flex min-h-10 items-center hover:text-zinc-100">Come funziona</a>
+            <a href="#per-chi" className="inline-flex min-h-10 items-center hover:text-zinc-100">Per chi</a>
+            <a href="#domande" className="inline-flex min-h-10 items-center hover:text-zinc-100">Domande</a>
           </nav>
           <Link
             href="/dashboard"
-            className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500"
+            className="inline-flex min-h-10 items-center rounded-xl bg-violet-600 px-4 text-sm font-medium text-white hover:bg-violet-500"
           >
             Apri l&apos;app
           </Link>
@@ -214,6 +271,20 @@ export default function Landing() {
           </div>
         </section>
 
+        <section id="domande" className="border-t border-zinc-900 bg-zinc-900/20">
+          <div className="mx-auto max-w-3xl px-5 py-20">
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Domande frequenti</h2>
+            <div className="mt-8 divide-y divide-zinc-800 border-y border-zinc-800">
+              {FAQ.map((item) => (
+                <div key={item.question} className="py-5">
+                  <h3 className="text-sm font-semibold text-zinc-100">{item.question}</h3>
+                  <p className="mt-2 text-[13px] leading-relaxed text-zinc-400">{item.answer}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="border-t border-zinc-900">
           <div className="mx-auto max-w-3xl px-5 py-20 text-center">
             <h2 className="text-3xl font-bold tracking-tight">La tua pagina è a una frase di distanza</h2>
@@ -235,14 +306,33 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-5 py-8">
           <div className="flex flex-col items-center justify-between gap-3 text-xs text-zinc-600 sm:flex-row">
             <Brand className="text-zinc-400" />
-            <div className="flex flex-wrap justify-center gap-5">
-              <a href="#funzioni" className="hover:text-zinc-400">Funzioni</a>
-              <a href="#come" className="hover:text-zinc-400">Come funziona</a>
-              <Link href="/dashboard" className="hover:text-zinc-400">Apri l&apos;app</Link>
-              <Link href="/termini" className="hover:text-zinc-400">Termini</Link>
-              <Link href="/privacy" className="hover:text-zinc-400">Privacy</Link>
-              <Link href="/cookie" className="hover:text-zinc-400">Cookie</Link>
-            </div>
+            <nav aria-label="Collegamenti del sito" className="flex flex-wrap justify-center gap-x-5">
+              {[
+                { href: "#funzioni", label: "Funzioni" },
+                { href: "#come", label: "Come funziona" },
+                { href: "#domande", label: "Domande" },
+              ].map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="inline-flex min-h-10 items-center underline-offset-4 hover:text-zinc-400 hover:underline"
+                >
+                  {item.label}
+                </a>
+              ))}
+              <Link href="/dashboard" className="inline-flex min-h-10 items-center underline-offset-4 hover:text-zinc-400 hover:underline">
+                Apri l&apos;app
+              </Link>
+              <Link href="/termini" className="inline-flex min-h-10 items-center underline-offset-4 hover:text-zinc-400 hover:underline">
+                Termini
+              </Link>
+              <Link href="/privacy" className="inline-flex min-h-10 items-center underline-offset-4 hover:text-zinc-400 hover:underline">
+                Privacy
+              </Link>
+              <Link href="/cookie" className="inline-flex min-h-10 items-center underline-offset-4 hover:text-zinc-400 hover:underline">
+                Cookie
+              </Link>
+            </nav>
           </div>
 
           <p className="mt-6 border-t border-zinc-900 pt-5 text-center text-[11px] leading-relaxed text-zinc-600">
