@@ -1,12 +1,8 @@
-"use client";
-
-import { useState } from "react";
 import type { InfoRow } from "@/lib/site";
 
 type Props = {
   title?: string;
   rows: InfoRow[];
-  accent: string;
   textColor: string;
   soft: string;
   line: string;
@@ -14,19 +10,12 @@ type Props = {
   faint: string;
 };
 
-export function InfoBlock({ title, rows, accent, textColor, soft, line, radius, faint }: Props) {
-  const [copied, setCopied] = useState<string | null>(null);
-
-  async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(value);
-      setTimeout(() => setCopied(null), 1600);
-    } catch {
-      window.prompt("Copia", value);
-    }
-  }
-
+/**
+ * Elenco etichetta/valore (orari, Wi-Fi, indirizzi). Senza pulsante "Copia": il
+ * testo resta selezionabile, e i valori lunghi vanno a capo invece di essere
+ * troncati, così una password si legge per intero.
+ */
+export function InfoBlock({ title, rows, textColor, soft, line, radius, faint }: Props) {
   return (
     <section className="border p-4" style={{ backgroundColor: faint, borderColor: line, borderRadius: radius }}>
       {title && <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: soft }}>{title}</h2>}
@@ -34,25 +23,15 @@ export function InfoBlock({ title, rows, accent, textColor, soft, line, radius, 
         {rows.map((row, i) => (
           <li
             key={`${row.label}-${i}`}
-            className="flex items-center justify-between gap-3 py-2.5"
+            className="py-2.5"
             style={{ borderTop: i ? `1px solid ${line}` : undefined }}
           >
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-wide" style={{ color: soft }}>
-                {row.label}
-              </p>
-              <p className="truncate text-[13.5px] font-semibold" style={{ color: textColor }}>
-                {row.value}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => copy(row.value)}
-              className="inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 text-[11px] font-medium transition-opacity hover:opacity-80"
-              style={{ borderColor: line, color: copied === row.value ? accent : soft }}
-            >
-              {copied === row.value ? "Copiato ✓" : "Copia"}
-            </button>
+            <p className="text-[11px] uppercase tracking-wide" style={{ color: soft }}>
+              {row.label}
+            </p>
+            <p className="break-words text-[13.5px] font-semibold" style={{ color: textColor }}>
+              {row.value}
+            </p>
           </li>
         ))}
       </ul>

@@ -12,10 +12,36 @@ export function AuthForm({ next }: { next: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [accept, setAccept] = useState(false);
+  // Dopo la password corretta, un account con 2FA riceve un biglietto a vita breve.
+  const [ticket, setTicket] = useState("");
+  const [code, setCode] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    if (ticket) {
+      setBusy(true);
+      setError("");
+      const res = await safeFetch("/api/auth/2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket, code }),
+      });
+      if (!res) {
+        setError("Connessione assente: riprova.");
+        setBusy(false);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Codice non valido");
+        setBusy(false);
+        return;
+      }
+      router.replace(next);
+      router.refresh();
+      return;
+    }
     if (mode === "register" && !accept) {
       setError("Devi accettare i Termini di servizio per creare un account");
       return;
@@ -38,12 +64,69 @@ export function AuthForm({ next }: { next: string }) {
       setBusy(false);
       return;
     }
+    if (data.twoFactor === true && typeof data.ticket === "string") {
+      setTicket(data.ticket);
+      setBusy(false);
+      return;
+    }
     router.replace(next);
     router.refresh();
   }
 
   const field =
     "w-full rounded-xl bg-zinc-950 px-3.5 py-3 text-sm outline-none ring-1 ring-zinc-800 focus:ring-violet-500";
+
+  if (ticket) {
+    return (
+      <form onSubmit={submit} className="space-y-3">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="auth-code"
+            className="block text-[11px] uppercase tracking-wider text-zinc-500"
+          >
+            Codice di verifica
+          </label>
+          <input
+            id="auth-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="123456"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            className={`${field} text-center font-mono tracking-[0.35em]`}
+            required
+          />
+          <p className="text-[11.5px] leading-relaxed text-zinc-500">
+            Apri l&apos;app di autenticazione e inserisci il codice a 6 cifre. Se non hai il telefono,
+            usa uno dei codici di recupero che hai salvato.
+          </p>
+        </div>
+
+        {error && <p className="text-[12px] text-red-400">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={busy || !code.trim()}
+          className="w-full rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+        >
+          {busy ? "…" : "Verifica e entra"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setTicket("");
+            setCode("");
+            setError("");
+          }}
+          className="w-full text-center text-xs text-zinc-400 underline-offset-4 hover:text-zinc-200 hover:underline"
+        >
+          Torna all&apos;accesso
+        </button>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={submit} className="space-y-3">

@@ -5,9 +5,12 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { aiUsageThisMonth, listLeadsForOwner, listSites } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
+import { decryptSecret } from "@/lib/secure";
 import { Brand } from "@/components/Brand";
+import { AiKeySettings } from "@/components/AiKeySettings";
 import { ChangeEmail } from "@/components/ChangeEmail";
 import { ChangePassword } from "@/components/ChangePassword";
+import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import { DeleteAccount } from "@/components/DeleteAccount";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -24,6 +27,8 @@ export default async function AccountPage() {
     aiUsageThisMonth(user.id),
   ]);
   const memberSince = new Date(user.createdAt).toLocaleDateString("it-IT", { dateStyle: "long" });
+  // Solo le ultime 4 cifre: la chiave in chiaro non deve mai arrivare al browser.
+  const aiKeyTail = decryptSecret(user.geminiKeyCipher)?.slice(-4) ?? null;
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
@@ -82,12 +87,29 @@ export default async function AccountPage() {
         </section>
 
         <section className={card}>
+          <h2 className="text-sm font-semibold">Chiave Gemini personale</h2>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500">
+            La chat genera le pagine con la chiave della piattaforma. Se ne hai una tua, mettila qui:
+            le tue richieste passano dalla tua chiave.
+          </p>
+          <div className="mt-3">
+            <AiKeySettings tail={aiKeyTail} />
+          </div>
+        </section>
+
+        <section className={card}>
           <h2 className="text-sm font-semibold">Sicurezza</h2>
           <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500">
             Cambiando la password disconnetti le sessioni aperte sugli altri dispositivi.
           </p>
           <div className="mt-3">
             <ChangePassword />
+          </div>
+          <div className="mt-4 border-t border-zinc-800 pt-4">
+            <h3 className="text-[13px] font-semibold text-zinc-200">Verifica in due passaggi</h3>
+            <div className="mt-2">
+              <TwoFactorSettings enabled={user.twoFactorEnabled} />
+            </div>
           </div>
         </section>
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { deleteSite, updateSite } from "@/lib/store";
+import { deleteSite, isSlugAvailable, slugify, updateSite } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
 import { normalizeSite, withLegalAck, type Site } from "@/lib/site";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
@@ -54,6 +54,18 @@ export async function PATCH(req: Request, { params }: Ctx) {
       ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
       userAgent: req.headers.get("user-agent") ?? undefined,
     });
+  }
+
+  // La disponibilità si verifica prima del salvataggio: il suffisso automatico
+  // della creazione qui confonderebbe (l'utente scrive un link e ne ottiene un altro).
+  if (typeof body.slug === "string") {
+    const requested = slugify(body.slug);
+    if (!(await isSlugAvailable(requested, id))) {
+      return NextResponse.json(
+        { error: "Questo indirizzo è già in uso: scegline un altro" },
+        { status: 409 },
+      );
+    }
   }
 
   const site = await updateSite(id, {

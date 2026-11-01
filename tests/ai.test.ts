@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  aiConfigured,
   aiModel,
   aiProvider,
+  aiTarget,
   generationConfig,
   isThinkingUnsupported,
   readUsage,
@@ -41,6 +43,22 @@ describe("aiProvider", () => {
     process.env.GOOGLE_VERTEX_API_KEY = "k";
     process.env.AI_PROVIDER = "gemini";
     expect(aiProvider()).toBe("gemini");
+  });
+});
+
+describe("chiave personale dell'utente", () => {
+  it("vince sul provider configurato e finisce nell'header della richiesta", async () => {
+    process.env.GOOGLE_VERTEX_API_KEY = "vertex";
+    const target = await aiTarget("edit", { apiKey: "chiave-utente" });
+    expect(target.provider).toBe("gemini");
+    expect(target.headers["x-goog-api-key"]).toBe("chiave-utente");
+    expect(target.url).toContain(`models/${aiModel("edit")}:generateContent`);
+  });
+
+  it("basta la chiave dell'utente per avere l'assistente configurato", () => {
+    expect(aiConfigured("chiave-utente")).toBe(true);
+    expect(aiConfigured("   ")).toBe(false);
+    expect(aiConfigured(null)).toBe(false);
   });
 });
 

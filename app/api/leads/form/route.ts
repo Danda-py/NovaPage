@@ -4,6 +4,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { emailConfigured, leadNotificationHtml, leadThankYouHtml, sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
 import { encodeLeadCookie, LEAD_COOKIE, parseLeadSubmission } from "@/lib/lead-form";
+import { platformHost } from "@/lib/domain";
 
 /**
  * Modulo contatti delle pagine in HTML libero.
@@ -20,8 +21,26 @@ export async function POST(req: Request) {
   const rawSlug = get("slug").slice(0, 60);
   const slug = /^[a-z0-9][a-z0-9-]*$/i.test(rawSlug) ? rawSlug : "";
 
+  // Su un dominio personalizzato la pagina sta alla radice, non sotto /s/: tornare
+  // a /s/{slug} mostrerebbe un indirizzo della piattaforma (e un 404).
+  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "")
+    .split(",")[0]
+    .trim()
+    .split(":")[0]
+    .toLowerCase();
+  // Anteprime e sviluppo restano sulla piattaforma: solo un dominio del cliente
+  // serve la pagina alla radice.
+  const onPlatform =
+    !host ||
+    host === platformHost() ||
+    host.endsWith(".vercel.app") ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    host === "::1";
+
   const back = (state: string, keepValues: boolean, values = "") => {
-    const target = slug ? `/s/${slug}?contatto=${state}` : "/";
+    const target = slug ? `${onPlatform ? `/s/${slug}` : "/"}?contatto=${state}` : "/";
     const res = NextResponse.redirect(new URL(target, req.url), 303);
     res.cookies.set({
       name: LEAD_COOKIE,

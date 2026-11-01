@@ -5,6 +5,20 @@ export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
+/**
+ * Resend consegna solo all'indirizzo del titolare finché il mittente è quello di
+ * prova (`@resend.dev`). Distinguere la modalità permette all'interfaccia di dire
+ * la verità invece di mostrare "email inviata" quando non parte nulla.
+ */
+export type EmailMode = "missing" | "test" | "ready";
+
+export function emailMode(): EmailMode {
+  const from = process.env.EMAIL_FROM ?? "";
+  if (!process.env.RESEND_API_KEY || !from) return "missing";
+  const host = from.match(/@([^>\s]+)/)?.[1]?.toLowerCase() ?? "";
+  return host === "resend.dev" || host.endsWith(".resend.dev") ? "test" : "ready";
+}
+
 export async function sendEmail(input: {
   to: string;
   subject: string;

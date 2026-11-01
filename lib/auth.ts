@@ -26,6 +26,11 @@ function getSecret(): string {
   return generated;
 }
 
+/** Materiale segreto dell'app, condiviso da sessioni e cifratura dei segreti utente. */
+export function authSecret(): string {
+  return getSecret();
+}
+
 /**
  * scrypt asincrono: la versione sincrona blocca l'event loop per ~300 ms a ogni
  * login, registrazione o reset, serializzando le altre richieste dell'istanza.
@@ -76,6 +81,30 @@ export function readSessionToken(
   if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   if (Number(expires) < Date.now()) return null;
   return { userId, sessionVersion: Number(version) || 0 };
+}
+
+/**
+ * Biglietto a vita breve emesso dopo la password e prima del codice 2FA: non è
+ * una sessione (nessun cookie) e non vale come token di accesso.
+ */
+const TWO_FACTOR_TTL_MS = 5 * 60 * 1000;
+
+export function createTwoFactorTicket(userId: string): string {
+  const expires = Date.now() + TWO_FACTOR_TTL_MS;
+  const payload = `2fa:${userId}.${expires}`;
+  return `${userId}.${expires}.${sign(payload)}`;
+}
+
+export function readTwoFactorTicket(ticket: string | undefined): string | null {
+  if (!ticket) return null;
+  const parts = ticket.split(".");
+  if (parts.length !== 3) return null;
+  const [userId, expires, signature] = parts;
+  const expected = sign(`2fa:${userId}.${expires}`);
+  if (signature.length !== expected.length) return null;
+  if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  if (Number(expires) < Date.now()) return null;
+  return userId;
 }
 
 export async function getCurrentUser(): Promise<User | null> {

@@ -9,8 +9,19 @@ create table if not exists users (
   salt            text not null,
   session_version   int not null default 0,
   terms_accepted_at timestamptz,
+  two_factor_secret   text,
+  two_factor_enabled  boolean not null default false,
+  two_factor_recovery jsonb not null default '[]'::jsonb,
+  -- Chiave Gemini personale, cifrata (AES-256-GCM) con il segreto dell'app.
+  gemini_key        text,
   created_at        timestamptz not null default now()
 );
+
+-- Colonne aggiunte dopo la prima versione: vanno garantite anche sui database in uso.
+alter table users add column if not exists two_factor_secret text;
+alter table users add column if not exists two_factor_enabled boolean not null default false;
+alter table users add column if not exists two_factor_recovery jsonb not null default '[]'::jsonb;
+alter table users add column if not exists gemini_key text;
 
 create table if not exists sites (
   id         text primary key,
@@ -25,6 +36,18 @@ create table if not exists sites (
 -- `create table if not exists` non tocca una tabella già esistente: le colonne
 -- aggiunte dopo la prima versione vanno garantite anche sui database in uso.
 alter table sites add column if not exists published boolean not null default true;
+-- Dominio personalizzato: la riga esiste solo dopo il collegamento e
+-- `custom_domain_token` è il valore da pubblicare in TXT per la proprietà.
+alter table sites add column if not exists custom_domain text;
+alter table sites add column if not exists custom_domain_token text;
+alter table sites add column if not exists custom_domain_verified_at timestamptz;
+-- Secondo host della stessa pagina: apex e www sono due nomi, non due siti.
+alter table sites add column if not exists custom_domain_alias text;
+
+create unique index if not exists sites_custom_domain_idx on sites (lower(custom_domain))
+  where custom_domain is not null;
+create unique index if not exists sites_custom_domain_alias_idx on sites (lower(custom_domain_alias))
+  where custom_domain_alias is not null;
 
 create index if not exists sites_owner_idx on sites(owner_id);
 create index if not exists sites_published_idx on sites(published, updated_at desc);

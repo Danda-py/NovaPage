@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Ask, Site } from "@/lib/site";
 import type { ChatMessage } from "@/lib/store";
 import { SitePreview } from "@/components/SitePreview";
+import { FontLoader } from "@/components/FontLoader";
 import { AskForm } from "@/components/AskForm";
 import { Brand } from "@/components/Brand";
 import { ManualEditor } from "@/components/ManualEditor";
@@ -51,6 +52,7 @@ export function Editor({
   const [input, setInput] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"chat" | "edit" | "html" | "settings" | "preview">("chat");
   const [save, setSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -127,19 +129,38 @@ export function Editor({
   async function uploadFiles(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true);
+    setUploadError("");
     for (const file of Array.from(files).slice(0, 3)) {
       const fd = new FormData();
       fd.append("file", file);
       try {
         const res = await fetch("/api/upload", { method: "POST", body: fd });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok && data.url) setImages((prev) => [...prev, data.url]);
+        // Senza questo, un file troppo grande o non supportato spariva senza spiegazione.
+        else setUploadError(typeof data.error === "string" ? data.error : "Caricamento non riuscito.");
       } catch {
-        // ignora il singolo file fallito
+        setUploadError("Connessione assente: la foto non è stata caricata.");
       }
     }
     setUploading(false);
     if (fileInput.current) fileInput.current.value = "";
+  }
+
+  /**
+   * La chat legge lo stato dal database: le modifiche manuali ancora in coda
+   * devono arrivare prima della richiesta, altrimenti la risposta dell'IA
+   * riparte dalla versione vecchia e il salvataggio in coda la sovrascrive.
+   */
+  async function flushSave() {
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      await persist(site);
+    }
+    for (let i = 0; i < 40 && savingRef.current; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   }
 
   function toggleVoice() {
@@ -177,6 +198,7 @@ export function Editor({
     setInput("");
     setImages([]);
     setLoading(true);
+    await flushSave();
     setMessages((prev) => [
       ...prev,
       {
@@ -284,6 +306,12 @@ export function Editor({
           </div>
         )}
       </div>
+
+      {uploadError && (
+        <p role="alert" className="px-3 pt-1.5 text-[11px] text-red-400">
+          {uploadError}
+        </p>
+      )}
 
       {!!images.length && (
         <div className="flex gap-2 border-t border-zinc-800 px-3 pt-2.5">
@@ -476,6 +504,7 @@ export function Editor({
         </div>
         <div className={`${tab === "preview" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto md:block`}>
           <div className="mx-auto w-full px-0 py-0 md:max-w-[420px] md:px-6 md:py-8">
+            <FontLoader theme={site.theme} />
             <div className="min-h-full overflow-hidden bg-zinc-950 md:rounded-[2.25rem] md:border md:border-zinc-800 md:shadow-2xl">
               {isHtmlPage(site) ? (
                 <CustomPage html={sanitizeHtml(site.html!)} siteId={siteId} trackViews={false} />

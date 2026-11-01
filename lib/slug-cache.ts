@@ -14,6 +14,40 @@ const MAX = 500;
 
 const cache = new Map<string, { exists: boolean; at: number }>();
 
+const domainCache = new Map<string, { slug: string | null; at: number }>();
+
+/**
+ * Slug pubblicato dietro un dominio personalizzato verificato. Il risultato
+ * negativo resta in cache pochi secondi: appena l'utente verifica il dominio
+ * la pagina deve rispondere, non aspettare minuti.
+ */
+export async function customDomainSlug(host: string): Promise<string | null> {
+  const now = Date.now();
+  const key = host.toLowerCase();
+  const hit = domainCache.get(key);
+  if (hit && now - hit.at < TTL) return hit.slug;
+
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+
+  try {
+    const sql = neon(url);
+    const rows = (await sql`
+      select slug from sites
+      where (lower(custom_domain) = ${key} or lower(custom_domain_alias) = ${key})
+        and custom_domain_verified_at is not null
+        and published
+      limit 1
+    `) as Array<{ slug: string }>;
+    const slug = rows[0]?.slug ?? null;
+    if (domainCache.size >= MAX) domainCache.clear();
+    domainCache.set(key, { slug, at: now });
+    return slug;
+  } catch {
+    return null;
+  }
+}
+
 export async function publishedSlugExists(slug: string): Promise<boolean> {
   const now = Date.now();
   const hit = cache.get(slug);

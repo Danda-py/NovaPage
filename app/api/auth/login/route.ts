@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { createSessionToken, sessionCookieOptions, verifyPassword } from "@/lib/auth";
+import {
+  createSessionToken,
+  createTwoFactorTicket,
+  sessionCookieOptions,
+  verifyPassword,
+} from "@/lib/auth";
 import { findUserByEmail } from "@/lib/store";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 
@@ -26,6 +31,12 @@ export async function POST(req: Request) {
   const user = await findUserByEmail(email);
   if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
     return NextResponse.json({ error: "Email o password non corretti" }, { status: 401 });
+  }
+
+  // La password da sola non apre la sessione quando il secondo fattore è attivo:
+  // il client riceve un biglietto a vita breve e chiede il codice.
+  if (user.twoFactorEnabled) {
+    return NextResponse.json({ twoFactor: true, ticket: createTwoFactorTicket(user.id) });
   }
 
   const res = NextResponse.json({ ok: true, user: { id: user.id, email: user.email } });

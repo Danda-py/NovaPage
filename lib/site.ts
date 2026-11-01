@@ -1,3 +1,4 @@
+import { isValidFamilyName } from "./fonts";
 import { applyHtmlPatches, MAX_HTML, sanitizeHtml, toHtmlFragment } from "./html";
 
 export type BlockType =
@@ -94,8 +95,54 @@ export type BlockData = {
 
 export type Block = { id: string; type: BlockType; data: BlockData };
 
-export type ThemeStyle = "aurora" | "neon" | "editorial" | "luxury" | "glass" | "minimal";
+
+export type ThemeStyle =
+  | "aurora"
+  | "neon"
+  | "editorial"
+  | "luxury"
+  | "glass"
+  | "minimal"
+  | "brutal"
+  | "paper"
+  | "mono"
+  | "sunset"
+  | "forest"
+  | "chrome"
+  | "pastel"
+  | "riso"
+  | "blueprint"
+  | "custom";
 export type ThemeFont = "sans" | "serif" | "mono";
+
+/** Ruoli tipografici modificabili separatamente. */
+export type ThemeFontRole = "heading" | "body" | "label";
+export const THEME_FONT_ROLES: ThemeFontRole[] = ["heading", "body", "label"];
+
+/** Le scelte esposte da "Crea personalizzato": valori finiti, non CSS libero. */
+export type ThemeLook = {
+  radius: "sharp" | "small" | "medium" | "large" | "pill";
+  border: "none" | "hairline" | "solid";
+  shadow: "none" | "soft" | "strong";
+  density: "compact" | "normal" | "airy";
+  caps: "none" | "labels" | "all";
+};
+
+export const DEFAULT_LOOK: ThemeLook = {
+  radius: "medium",
+  border: "hairline",
+  shadow: "soft",
+  density: "normal",
+  caps: "labels",
+};
+
+export const LOOK_OPTIONS: Record<keyof ThemeLook, Array<ThemeLook[keyof ThemeLook]>> = {
+  radius: ["sharp", "small", "medium", "large", "pill"],
+  border: ["none", "hairline", "solid"],
+  shadow: ["none", "soft", "strong"],
+  density: ["compact", "normal", "airy"],
+  caps: ["none", "labels", "all"],
+};
 
 export type Theme = {
   bg_color: string;
@@ -104,6 +151,12 @@ export type Theme = {
   accent2: string;
   style: ThemeStyle;
   font: ThemeFont;
+  /** Font per ruolo: id del catalogo (lib/fonts.ts) o famiglia importata. */
+  fonts?: Partial<Record<ThemeFontRole, string>>;
+  /** Famiglie importate da Google Fonts, oltre al catalogo. */
+  customFonts?: string[];
+  /** Usato quando `style` è "custom". */
+  look?: ThemeLook;
 };
 
 /** Dati del titolare dell'attività, mostrati nel footer delle pagine pubbliche. */
@@ -129,8 +182,45 @@ export type Site = {
   legal?: SiteLegal;
 };
 
-export const THEME_STYLES: ThemeStyle[] = ["aurora", "neon", "editorial", "luxury", "glass", "minimal"];
+export const THEME_STYLES: ThemeStyle[] = [
+  "aurora",
+  "neon",
+  "editorial",
+  "luxury",
+  "glass",
+  "minimal",
+  "brutal",
+  "paper",
+  "mono",
+  "sunset",
+  "forest",
+  "chrome",
+  "pastel",
+  "riso",
+  "blueprint",
+  "custom",
+];
 export const THEME_FONTS: ThemeFont[] = ["sans", "serif", "mono"];
+
+/** Nomi leggibili degli stili, condivisi da tutti gli editor. */
+export const THEME_STYLE_LABELS: Record<ThemeStyle, string> = {
+  aurora: "Aurora",
+  neon: "Neon",
+  editorial: "Editoriale",
+  luxury: "Luxury",
+  glass: "Glass",
+  minimal: "Minimal",
+  brutal: "Brutal",
+  paper: "Carta",
+  mono: "Mono",
+  sunset: "Tramonto",
+  forest: "Bosco",
+  chrome: "Cromato",
+  pastel: "Pastello",
+  riso: "Riso",
+  blueprint: "Blueprint",
+  custom: "Personalizzato",
+};
 
 export type ToolCall = { name: string; args: Record<string, unknown> };
 
@@ -210,6 +300,11 @@ const DEFAULT_DATA: Record<BlockType, BlockData> = {
   form: { title: "Lasciami i tuoi contatti", text: "Ti rispondo entro 24 ore" },
   contact: { title: "Contatti", text: "Scrivimi per informazioni e prenotazioni" },
 };
+
+/** Blocco nuovo con i contenuti di partenza del suo tipo, usato dagli editor. */
+export function defaultBlock(type: BlockType): Block {
+  return { id: newId("blk"), type, data: { ...DEFAULT_DATA[type] } };
+}
 
 export const INITIAL_SITE: Site = {
   meta: { title: "La mia pagina", description: "Landing page creata con NovaPage" },
@@ -396,6 +491,32 @@ export function normalizeSite(raw: unknown): Site | null {
     }
     if (typeof t.font === "string" && THEME_FONTS.includes(t.font as ThemeFont)) {
       theme.font = t.font as ThemeFont;
+    }
+
+    if (t.fonts && typeof t.fonts === "object") {
+      const fonts = t.fonts as Record<string, unknown>;
+      const next: Partial<Record<ThemeFontRole, string>> = {};
+      for (const role of THEME_FONT_ROLES) {
+        const value = typeof fonts[role] === "string" ? (fonts[role] as string).trim().slice(0, 60) : "";
+        if (value) next[role] = value;
+      }
+      theme.fonts = Object.keys(next).length ? next : undefined;
+    }
+
+    const custom = strList(t.customFonts, 6)?.map((name) => name.trim()).filter(isValidFamilyName);
+    theme.customFonts = custom?.length ? [...new Set(custom)] : undefined;
+
+    if (t.look && typeof t.look === "object") {
+      const raw = t.look as Record<string, unknown>;
+      const look: ThemeLook = { ...DEFAULT_LOOK, ...(theme.look ?? {}) };
+      for (const key of Object.keys(LOOK_OPTIONS) as Array<keyof ThemeLook>) {
+        const value = raw[key];
+        if (typeof value === "string" && (LOOK_OPTIONS[key] as string[]).includes(value)) {
+          // Le chiavi sono omogenee per tipo: l'assegnazione resta un cast locale.
+          (look as Record<string, string>)[key] = value;
+        }
+      }
+      theme.look = look;
     }
   }
 

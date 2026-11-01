@@ -11,6 +11,8 @@ declare
     'users.password_hash',
     'users.session_version',
     'users.terms_accepted_at',
+    'users.two_factor_secret',
+    'users.gemini_key',
     'sites.owner_id',
     'sites.published',
     'sites.config',

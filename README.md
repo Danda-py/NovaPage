@@ -58,6 +58,9 @@ filesystem è read-only e il login fallirebbe. Anche il link di reset password u
 - La tabella `ai_usage` registra i token di ogni richiesta; il totale del mese è in `/account`.
 - Vertex AI parla lo stesso protocollo di Gemini: basta `GOOGLE_VERTEX_API_KEY` (express mode) oppure
   un service account, senza toccare il codice.
+- Ogni account può usare una **chiave Gemini propria** da `/account`: vince su quella della
+  piattaforma, si salva cifrata (AES-256-GCM con `AUTH_SECRET`) e viene verificata da Google al
+  momento del salvataggio. Non viene mai restituita al browser.
 
 ## Database
 
@@ -79,6 +82,9 @@ node --env-file=.env.local scripts/migrate-v5.mjs
 
 # consumo dei token dell'assistente
 node --env-file=.env.local scripts/migrate-v6.mjs
+
+# chiave Gemini personale dell'account (cifrata)
+node --env-file=.env.local scripts/migrate-v7.mjs
 
 # controllo che un database in uso abbia tutte le colonne richieste
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/verify.sql

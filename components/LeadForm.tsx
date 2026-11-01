@@ -5,6 +5,8 @@ import { safeFetch } from "@/lib/http";
 
 type Props = {
   siteId?: string;
+  /** Serve al link dell'informativa: quella della pagina, non quella della piattaforma. */
+  slug?: string;
   title?: string;
   text?: string;
   accent: string;
@@ -20,6 +22,7 @@ type Props = {
 
 export function LeadForm({
   siteId,
+  slug,
   title,
   text,
   accent,
@@ -181,7 +184,7 @@ export function LeadForm({
         <span>
           Ho letto l&apos;
           <a
-            href="/privacy"
+            href={slug ? `/s/${slug}/privacy` : "/privacy"}
             target="_blank"
             rel="noreferrer"
             className="underline underline-offset-2"

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { loadPublishedSite } from "@/lib/public-site";
+import { googleFontsHref } from "@/lib/fonts";
 import { siteUrl } from "@/lib/site-url";
 import { jsonLdScript, pageDescription, siteJsonLd } from "@/lib/seo";
 import { SitePreview } from "@/components/SitePreview";
@@ -153,8 +154,22 @@ export default async function PublicPage({
   const savedValues =
     contatto && contatto !== "inviato" ? decodeLeadCookie(jar.get(LEAD_COOKIE)?.value) : null;
 
+  // Un solo link per tutte le famiglie Google del tema, e nessuno se bastano i
+  // font di sistema: la landing non deve pagare una richiesta che non usa.
+  const fontsHref = googleFontsHref({
+    fonts: site.config.theme.fonts,
+    customFonts: site.config.theme.customFonts,
+  });
+
   return (
     <>
+      {fontsHref && (
+        <>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href={fontsHref} />
+        </>
+      )}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -183,11 +198,13 @@ export default async function PublicPage({
         )
       ) : (
         <main>
-          <SitePreview site={site.config} siteId={site.id} />
+          <SitePreview site={site.config} siteId={site.id} slug={site.slug} />
         </main>
       )}
       <SiteLegalLinks slug={site.slug} light={light} />
-      {!site.config.hideBadge && <SiteBadge />}
+      {/* Il badge porta sulla piattaforma: in relativo, su un dominio personalizzato
+          riporterebbe alla pagina stessa. */}
+      {!site.config.hideBadge && <SiteBadge href={`${siteUrl()}/?utm_source=badge&utm_medium=landing`} />}
       {/* CustomPage conta già le visite e i clic: qui servirebbe una seconda volta. */}
       {!custom && <SiteTracker siteId={site.id} />}
     </>

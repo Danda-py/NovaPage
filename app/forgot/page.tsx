@@ -7,7 +7,8 @@ import { safeFetch } from "@/lib/http";
 
 export default function ForgotPage() {
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "busy" | "sent" | "unconfigured">("idle");
+  const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
+  const [mode, setMode] = useState<"missing" | "test" | "ready">("ready");
   const [error, setError] = useState("");
 
   async function submit(e: React.FormEvent) {
@@ -31,7 +32,8 @@ export default function ForgotPage() {
       setState("idle");
       return;
     }
-    setState(data.reason === "unconfigured" ? "unconfigured" : "sent");
+    setMode(data.mode === "missing" || data.mode === "test" ? data.mode : "ready");
+    setState("sent");
   }
 
   const field =
@@ -54,21 +56,36 @@ export default function ForgotPage() {
           Inserisci l&apos;email del tuo account: ti inviamo un link per scegliere una nuova password.
         </p>
 
-        {state === "sent" || state === "unconfigured" ? (
-          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-            <p className="text-sm font-medium text-zinc-200">
-              {state === "sent"
-                ? "Se l'email è registrata riceverai un link a breve."
-                : "Link non inviato: l'invio email non è configurato su questa installazione."}
-            </p>
-            <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-400">
-              {state === "sent"
-                ? "Controlla anche la cartella spam. Il link scade dopo un'ora."
-                : "Serve RESEND_API_KEY e EMAIL_FROM nelle variabili d'ambiente per inviare il messaggio."}
-            </p>
-            <Link href="/login" className="mt-4 inline-block text-xs text-violet-400 hover:underline">
-              Torna all&apos;accesso
-            </Link>
+        {state === "sent" ? (
+          <div className="mt-6 space-y-3">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <p className="text-sm font-medium text-zinc-200">
+                {mode === "missing"
+                  ? "Link non inviato: l'invio email non è configurato su questa installazione."
+                  : "Se l'email è registrata riceverai un link a breve."}
+              </p>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-400">
+                {mode === "missing"
+                  ? "Servono RESEND_API_KEY e EMAIL_FROM nelle variabili d'ambiente per inviare il messaggio."
+                  : "Controlla anche la cartella spam. Il link scade dopo un'ora."}
+              </p>
+              <Link href="/login" className="mt-4 inline-block text-xs text-violet-400 hover:underline">
+                Torna all&apos;accesso
+              </Link>
+            </div>
+
+            {mode !== "ready" && (
+              <div className="rounded-2xl border border-amber-900/50 bg-amber-950/20 p-4">
+                <p className="text-[12px] font-semibold text-amber-200">
+                  {mode === "test" ? "Mittente di prova" : "Invio email da configurare"}
+                </p>
+                <p className="mt-1 text-[11.5px] leading-relaxed text-amber-100/70">
+                  {mode === "test"
+                    ? "Con il mittente onboarding@resend.dev Resend consegna solo all'indirizzo del titolare dell'account. Verifica un dominio su resend.com/domains e imposta EMAIL_FROM su un indirizzo di quel dominio: da quel momento i link arrivano a tutti gli utenti."
+                    : "Imposta RESEND_API_KEY e EMAIL_FROM nel pannello di hosting, poi riprova."}
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <form onSubmit={submit} className="mt-6 space-y-3">

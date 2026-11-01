@@ -10,6 +10,7 @@ import { VersionHistory } from "@/components/VersionHistory";
 import { MarkRead } from "@/components/MarkRead";
 import { DeleteLead } from "@/components/DeleteLead";
 import { siteReadiness } from "@/lib/readiness";
+import { domainRecords } from "@/lib/domain";
 import { Brand } from "@/components/Brand";
 
 function formatDate(iso: string) {
@@ -86,6 +87,15 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
             title={site.config.meta.title}
             slug={site.slug}
             published={site.published}
+            customDomain={site.customDomain}
+            customDomainAlias={site.customDomainAlias}
+            domainVerified={site.domainVerified}
+            domainToken={site.customDomainToken}
+            initialRecords={
+              site.customDomain
+                ? domainRecords(site.customDomain, site.customDomainToken ?? "")
+                : null
+            }
           />
           <Link
             href={`/s/${site.slug}`}

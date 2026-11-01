@@ -2,8 +2,10 @@ import { createHmac } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   createSessionToken,
+  createTwoFactorTicket,
   hashPassword,
   readSessionToken,
+  readTwoFactorTicket,
   verifyPassword,
 } from "@/lib/auth";
 
@@ -51,6 +53,26 @@ describe("sessioni", () => {
     expect(readSessionToken("")).toBeNull();
     expect(readSessionToken("solo.user")).toBeNull();
     expect(readSessionToken("a.b.c.d.e")).toBeNull();
+  });
+});
+
+describe("biglietto 2FA", () => {
+  it("identifica l'utente senza aprire una sessione", () => {
+    const ticket = createTwoFactorTicket("user_123");
+    expect(readTwoFactorTicket(ticket)).toBe("user_123");
+    // Non è un token di sessione: le due funzioni non devono accettarsi a vicenda.
+    expect(readSessionToken(ticket)).toBeNull();
+    expect(readTwoFactorTicket(createSessionToken("user_123"))).toBeNull();
+  });
+
+  it("rifiuta un biglietto manomesso o scaduto", () => {
+    const ticket = createTwoFactorTicket("user_123");
+    const tampered = `${ticket.slice(0, -1)}${ticket.endsWith("A") ? "B" : "A"}`;
+    expect(readTwoFactorTicket(tampered)).toBeNull();
+
+    const payload = `user_123.${Date.now() - 1_000}`;
+    const expired = `${payload}.${signPayload(`2fa:${payload}`)}`;
+    expect(readTwoFactorTicket(expired)).toBeNull();
   });
 });
 

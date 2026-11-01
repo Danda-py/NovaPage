@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { safeFetch } from "@/lib/http";
 import {
   BLOCK_LAYOUTS,
+  BLOCK_TYPES,
   BUTTON_ICONS,
-  THEME_FONTS,
-  THEME_STYLES,
+  defaultBlock,
   type Block,
   type BlockType,
   type LinkButton,
@@ -162,7 +162,7 @@ export function ManualEditor({
   const [dragged, setDragged] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [hexDraft, setHexDraft] = useState<Record<string, string>>({});
+  const [newType, setNewType] = useState<BlockType>("banner");
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Solo sincronizzazione con il DOM: nessuno stato derivato qui dentro.
@@ -188,15 +188,14 @@ export function ManualEditor({
     commit(next);
   }
 
-  function patchTheme(patch: Partial<Theme>) {
+  function addBlock() {
+    const block = defaultBlock(newType);
     const next = structuredClone(site);
-    next.theme = { ...next.theme, ...patch };
+    next.blocks.push(block);
     commit(next);
-  }
-
-  function setColor(key: "bg_color" | "text_color" | "accent_color" | "accent2", value: string) {
-    if (!/^#[0-9a-fA-F]{6}$/.test(value)) return;
-    patchTheme({ [key]: value } as Partial<Theme>);
+    onOpenChange(block.id);
+    setError("");
+    setNewType("banner");
   }
 
   function move(blockId: string, to: number) {
@@ -215,18 +214,21 @@ export function ManualEditor({
     if (openId === blockId) onOpenChange(null);
   }
 
+  /**
+   * Trascinamento su un'altra scheda: il blocco prende il suo posto. L'indice va
+   * corretto quando si scende, perché togliere il blocco sposta di uno quelli
+   * sotto: senza la correzione il blocco finiva sempre *dopo* il bersaglio.
+   */
   function moveTo(fromId: string, toId: string) {
     if (fromId === toId) return;
-    const to = site.blocks.findIndex((b) => b.id === toId);
-    move(fromId, to);
+    const next = structuredClone(site);
+    const from = next.blocks.findIndex((b) => b.id === fromId);
+    const to = next.blocks.findIndex((b) => b.id === toId);
+    if (from < 0 || to < 0) return;
+    const [block] = next.blocks.splice(from, 1);
+    next.blocks.splice(from < to ? to - 1 : to, 0, block);
+    commit(next);
   }
-
-  const colorKeys = [
-    { key: "bg_color", title: "Sfondo" },
-    { key: "text_color", title: "Testo" },
-    { key: "accent_color", title: "Accento" },
-    { key: "accent2", title: "Secondo accento" },
-  ] as const;
 
   return (
     <div ref={panelRef} className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
@@ -247,62 +249,6 @@ export function ManualEditor({
       )}
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Pagina</h2>
-        <div className="space-y-1.5">
-          <span className={label}>Titolo</span>
-          <Field
-            value={site.meta.title}
-            onChange={(value) => {
-              const next = structuredClone(site);
-              next.meta.title = value;
-              commit(next);
-            }}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <span className={label}>Descrizione</span>
-          <Field
-            value={site.meta.description}
-            onChange={(value) => {
-              const next = structuredClone(site);
-              next.meta.description = value;
-              commit(next);
-            }}
-            textarea
-          />
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-          Dati attività
-        </h2>
-        <p className="text-[10.5px] leading-relaxed text-zinc-600">
-          Commercianti e professionisti: ragione sociale, P.IVA e sede sono obbligatorie per legge e
-          compaiono nel footer della pagina pubblicata.
-        </p>
-        {(
-          [
-            ["businessName", "Ragione sociale"],
-            ["vat", "Partita IVA"],
-            ["address", "Sede legale"],
-          ] as const
-        ).map(([key, title]) => (
-          <div key={key} className="space-y-1">
-            <span className={label}>{title}</span>
-            <Field
-              value={site.legal?.[key] ?? ""}
-              onChange={(value) => {
-                const next = structuredClone(site);
-                next.legal = { ...next.legal, [key]: value };
-                commit(next);
-              }}
-            />
-          </div>
-        ))}
-      </section>
-
-      <section className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
             Struttura
@@ -312,7 +258,7 @@ export function ManualEditor({
 
         {site.blocks.length === 0 && (
           <p className="rounded-lg border border-dashed border-zinc-800 px-3 py-4 text-center text-[11.5px] text-zinc-500">
-            Nessun blocco. Chiedi in chat di aggiungerne uno.
+            Nessun blocco: aggiungine uno qui sotto.
           </p>
         )}
 
@@ -406,67 +352,35 @@ export function ManualEditor({
             );
           })}
         </ul>
-      </section>
 
-      <section className="space-y-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Colori</h2>
-        <div className="grid grid-cols-2 gap-2">
-          {colorKeys.map(({ key, title }) => (
-            <div key={key} className="space-y-1">
-              <span className={label}>{title}</span>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="color"
-                  value={site.theme[key]}
-                  onChange={(e) => setColor(key, e.target.value)}
-                  className="h-8 w-9 shrink-0 cursor-pointer rounded-md border border-zinc-700 bg-transparent"
-                  aria-label={title}
-                />
-                <input
-                  value={hexDraft[key] ?? site.theme[key]}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setHexDraft((prev) => ({ ...prev, [key]: value }));
-                    if (/^#[0-9a-fA-F]{6}$/.test(value)) setColor(key, value);
-                  }}
-                  onBlur={() => setHexDraft((prev) => ({ ...prev, [key]: site.theme[key] }))}
-                  className="min-w-0 flex-1 rounded-md bg-zinc-950 px-2 py-1.5 font-mono text-[11px] outline-none ring-1 ring-zinc-800 focus:ring-violet-500"
-                  spellCheck={false}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <span className={label}>Stile</span>
+        <div className="space-y-1.5 rounded-xl border border-dashed border-zinc-800 p-2.5">
+          <label htmlFor="add-block-type" className="block text-[10px] uppercase tracking-wider text-zinc-500">
+            Aggiungi blocco
+          </label>
+          <div className="flex gap-1.5">
             <select
-              value={site.theme.style}
-              onChange={(e) => patchTheme({ style: e.target.value as Theme["style"] })}
+              id="add-block-type"
+              value={newType}
+              onChange={(e) => setNewType(e.target.value as BlockType)}
               className={input}
             >
-              {THEME_STYLES.map((style) => (
-                <option key={style} value={style}>
-                  {style}
+              {BLOCK_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {LABELS[type]}
                 </option>
               ))}
             </select>
-          </div>
-          <div className="space-y-1">
-            <span className={label}>Font</span>
-            <select
-              value={site.theme.font}
-              onChange={(e) => patchTheme({ font: e.target.value as Theme["font"] })}
-              className={input}
+            <button
+              type="button"
+              onClick={addBlock}
+              className="shrink-0 rounded-lg border border-zinc-700 px-2.5 text-[11px] font-medium text-zinc-200 hover:border-zinc-500"
             >
-              {THEME_FONTS.map((font) => (
-                <option key={font} value={font}>
-                  {font}
-                </option>
-              ))}
-            </select>
+              Aggiungi
+            </button>
           </div>
+          <p className="text-[10px] leading-relaxed text-zinc-600">
+            Il blocco viene aggiunto in fondo alla pagina: poi trascinalo dove ti serve.
+          </p>
         </div>
       </section>
     </div>

@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { addLead, deleteLead, findOwnerContact, listLeads, updateLead } from "@/lib/store";
+import { addLead, deleteLead, findOwnerContact, getSite, listLeads, updateLead } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 import { emailConfigured, leadNotificationHtml, sendEmail } from "@/lib/email";
@@ -112,6 +112,13 @@ export async function POST(req: Request) {
   const limit = await rateLimit(`lead:${clientIp(req)}:${body.siteId}`, 10, 60 * 60 * 1000);
   if (!limit.ok) {
     return NextResponse.json({ error: tooMany(limit.retryAfter) }, { status: 429 });
+  }
+
+  // Solo una pagina pubblicata raccoglie contatti: una bozza non ha un modulo
+  // raggiungibile e l'endpoint non deve poter riempire la casella del titolare.
+  const site = await getSite(body.siteId);
+  if (!site || !site.published) {
+    return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
   }
 
   const email = (body.email ?? "").trim();

@@ -18,6 +18,13 @@ export type User = {
   salt: string;
   sessionVersion: number;
   termsAcceptedAt: string | null;
+  /** Segreto TOTP in base32: presente anche prima della conferma (attivazione in corso). */
+  twoFactorSecret: string | null;
+  twoFactorEnabled: boolean;
+  /** Hash dei codici di recupero già emessi; un codice viene consumato al primo uso. */
+  twoFactorRecovery: string[];
+  /** Chiave Gemini personale cifrata; null = si usa quella dell'installazione. */
+  geminiKeyCipher: string | null;
   createdAt: string;
 };
 
@@ -34,6 +41,13 @@ export type StoredSite = {
   slug: string;
   /** false = bozza: link pubblico 404 e pagina esclusa dalla sitemap. */
   published: boolean;
+  /** Dominio collegato (es. www.miopanetteria.it), se presente. */
+  customDomain?: string;
+  /** L'altro nome della coppia apex/www, servito dalla stessa pagina. */
+  customDomainAlias?: string;
+  /** Token TXT per dimostrare la proprietà del dominio. */
+  customDomainToken?: string;
+  domainVerified: boolean;
   config: Site;
   createdAt: string;
   updatedAt: string;
@@ -105,6 +119,10 @@ type SiteRow = {
   uniques: number | null;
   clicks: Record<string, number> | null;
   total_clicks: number | null;
+  custom_domain: string | null;
+  custom_domain_alias: string | null;
+  custom_domain_token: string | null;
+  custom_domain_verified_at: string | Date | null;
 };
 
 type LeadRow = {
@@ -139,6 +157,10 @@ type UserRow = {
   salt: string;
   session_version: number;
   terms_accepted_at: string | Date | null;
+  two_factor_secret?: string | null;
+  two_factor_enabled?: boolean | null;
+  two_factor_recovery?: string[] | null;
+  gemini_key?: string | null;
   created_at: string | Date;
 };
 
@@ -150,6 +172,10 @@ function mapSite(row: SiteRow): StoredSite {
     ownerId: row.owner_id ?? undefined,
     slug: row.slug,
     published: row.published ?? true,
+    ...(row.custom_domain ? { customDomain: row.custom_domain } : null),
+    ...(row.custom_domain_alias ? { customDomainAlias: row.custom_domain_alias } : null),
+    ...(row.custom_domain_token ? { customDomainToken: row.custom_domain_token } : null),
+    domainVerified: Boolean(row.custom_domain_verified_at),
     config: row.config,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -194,6 +220,10 @@ const mapUser = (row: UserRow): User => ({
   salt: row.salt,
   sessionVersion: row.session_version ?? 0,
   termsAcceptedAt: row.terms_accepted_at ? iso(row.terms_accepted_at) : null,
+  twoFactorSecret: row.two_factor_secret ?? null,
+  twoFactorEnabled: row.two_factor_enabled ?? false,
+  twoFactorRecovery: Array.isArray(row.two_factor_recovery) ? row.two_factor_recovery : [],
+  geminiKeyCipher: row.gemini_key ?? null,
   createdAt: iso(row.created_at),
 });
 
@@ -251,6 +281,41 @@ export async function getSiteBySlug(slug: string): Promise<StoredSite | null> {
   const sql = db();
   const rows = (await sql.query(`${SITE_SELECT} where s.slug = $1 limit 1`, [slug])) as SiteRow[];
   return rows[0] ? mapSite(rows[0]) : null;
+}
+
+/** Un indirizzo è libero se non lo usa nessun'altra pagina (la propria non conta). */
+export async function isSlugAvailable(slug: string, ignoreId?: string): Promise<boolean> {
+  const sql = db();
+  const normalized = slugify(slug);
+  const rows = (await sql`select id from sites where slug = ${normalized} limit 1`) as Array<{
+    id: string;
+  }>;
+  return !rows[0] || rows[0].id === ignoreId;
+}
+
+/**
+ * La landing da servire quando la richiesta arriva su un dominio collegato.
+ * Solo i domini verificati e le pagine pubblicate rispondono: un dominio in
+ * attesa non deve mostrare contenuti.
+ */
+export async function getSiteByCustomDomain(domain: string): Promise<StoredSite | null> {
+  const sql = db();
+  const rows = (await sql.query(
+    `${SITE_SELECT} where (lower(s.custom_domain) = lower($1) or lower(s.custom_domain_alias) = lower($1)) and s.custom_domain_verified_at is not null and s.published = true limit 1`,
+    [domain],
+  )) as SiteRow[];
+  return rows[0] ? mapSite(rows[0]) : null;
+}
+
+/** Qualsiasi pagina (anche in attesa di verifica) che occupa già un dominio. */
+export async function findSiteIdByDomain(domain: string): Promise<string | null> {
+  const sql = db();
+  const rows = (await sql`
+    select id from sites
+    where lower(custom_domain) = lower(${domain}) or lower(custom_domain_alias) = lower(${domain})
+    limit 1
+  `) as Array<{ id: string }>;
+  return rows[0]?.id ?? null;
 }
 
 export async function createSite(
@@ -360,6 +425,45 @@ export async function updateSite(
       update sites set published = ${patch.published}, updated_at = now() where id = ${siteId}
     `;
   }
+  return getSite(siteId);
+}
+
+/** Collega (o rimuove, con domain null) un dominio personalizzato, sempre da verificare. */
+export async function setSiteCustomDomain(
+  siteId: string,
+  domain: string | null,
+  token: string | null = null,
+  alias: string | null = null,
+): Promise<StoredSite | null> {
+  const sql = db();
+  const current = await getSite(siteId);
+  if (!current) return null;
+
+  // Salvare di nuovo lo stesso dominio non deve azzerare la verifica appena
+  // fatta: l'utente si ritroverebbe il sito offline senza capire perché.
+  const same =
+    domain !== null &&
+    (current.customDomain ?? "").toLowerCase() === domain.toLowerCase() &&
+    (current.customDomainAlias ?? "").toLowerCase() === (alias ?? "").toLowerCase();
+  if (same) return current;
+
+  await sql`
+    update sites
+    set custom_domain = ${domain},
+        custom_domain_alias = ${domain ? alias : null},
+        custom_domain_token = ${domain ? token : null},
+        custom_domain_verified_at = null,
+        updated_at = now()
+    where id = ${siteId}
+  `;
+  return getSite(siteId);
+}
+
+export async function markSiteDomainVerified(siteId: string): Promise<StoredSite | null> {
+  const sql = db();
+  await sql`
+    update sites set custom_domain_verified_at = now(), updated_at = now() where id = ${siteId}
+  `;
   return getSite(siteId);
 }
 
@@ -699,6 +803,53 @@ export async function updateUserPassword(
 export type EmailUpdate = "ok" | "taken" | "missing";
 
 /** Cambio email: il vincolo unique è la sola condizione di errore prevedibile. */
+export async function setUserGeminiKey(userId: string, cipher: string | null): Promise<void> {
+  const sql = db();
+  await sql`update users set gemini_key = ${cipher} where id = ${userId}`;
+}
+
+export async function setTwoFactorSecret(userId: string, secret: string | null): Promise<void> {
+  const sql = db();
+  // Cambiare segreto azzera anche lo stato: si riparte da un'attivazione da confermare.
+  await sql`
+    update users set two_factor_secret = ${secret}, two_factor_enabled = false where id = ${userId}
+  `;
+}
+
+export async function enableTwoFactor(userId: string, recoveryHashes: string[]): Promise<void> {
+  const sql = db();
+  await sql`
+    update users
+    set two_factor_enabled = true, two_factor_recovery = ${JSON.stringify(recoveryHashes)}::jsonb
+    where id = ${userId}
+  `;
+}
+
+export async function disableTwoFactor(userId: string): Promise<void> {
+  const sql = db();
+  await sql`
+    update users
+    set two_factor_secret = null, two_factor_enabled = false, two_factor_recovery = '[]'::jsonb
+    where id = ${userId}
+  `;
+}
+
+/** Consuma un codice di recupero: la query rimuove solo se il codice è presente. */
+export async function consumeTwoFactorRecovery(userId: string, hash: string): Promise<boolean> {
+  const sql = db();
+  const rows = (await sql`
+    update users
+    set two_factor_recovery = coalesce((
+      select jsonb_agg(value)
+      from jsonb_array_elements(two_factor_recovery) as value
+      where value <> to_jsonb(${hash}::text)
+    ), '[]'::jsonb)
+    where id = ${userId} and two_factor_recovery @> ${JSON.stringify([hash])}::jsonb
+    returning id
+  `) as Array<{ id: string }>;
+  return rows.length > 0;
+}
+
 export async function updateUserEmail(userId: string, email: string): Promise<EmailUpdate> {
   const sql = db();
   try {

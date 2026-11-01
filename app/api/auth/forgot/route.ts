@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createPasswordReset, findUserByEmail, logError } from "@/lib/store";
-import { emailConfigured, resetEmailHtml, sendEmail } from "@/lib/email";
+import { emailMode, resetEmailHtml, sendEmail } from "@/lib/email";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 import { siteUrl } from "@/lib/site-url";
 
@@ -15,16 +15,16 @@ export async function POST(req: Request) {
   const email = body?.email?.trim().toLowerCase() ?? "";
   if (!email) return NextResponse.json({ error: "Inserisci la tua email" }, { status: 400 });
 
-  if (!emailConfigured()) {
+  // `mode` descrive la configurazione, non l'esistenza dell'account: può quindi
+  // essere restituito senza trasformare l'endpoint in un oracolo sulle email.
+  const mode = emailMode();
+  if (mode === "missing") {
     await logError({
       source: "auth",
       message: "Reset password richiesto ma email non configurata",
       detail: "Imposta RESEND_API_KEY e EMAIL_FROM",
     });
-    return NextResponse.json(
-      { ok: true, delivered: false, reason: "unconfigured", note: "Invio email non configurato su questa installazione." },
-      { status: 200 },
-    );
+    return NextResponse.json({ ok: true, mode }, { status: 200 });
   }
 
   const user = await findUserByEmail(email);
@@ -48,5 +48,5 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, delivered: true });
+  return NextResponse.json({ ok: true, mode });
 }

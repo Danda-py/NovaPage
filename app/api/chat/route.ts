@@ -18,6 +18,7 @@ import { htmlOutline, validateHtml } from "@/lib/html";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
 import { riskyMarkup } from "@/lib/moderation";
 import { getCurrentUser } from "@/lib/auth";
+import { decryptSecret } from "@/lib/secure";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   aiConfigured,
@@ -41,6 +42,15 @@ const DESIGN_DIRECTIONS = [
   { style: "editorial", font: "sans", bg: "#faf8f5", text: "#1c1917", accent: "#0f766e", accent2: "#a8a29e", tone: "essenziale, luminoso, ordinato" },
   { style: "minimal", font: "sans", bg: "#0b0b0d", text: "#f2f2f2", accent: "#e11d48", accent2: "#a3a3a3", tone: "diretto, industriale, senza fronzoli" },
   { style: "glass", font: "sans", bg: "#0e0b16", text: "#f4f0ff", accent: "#a78bfa", accent2: "#f0abfc", tone: "delicato, curato, beauty" },
+  { style: "brutal", font: "sans", bg: "#f2f0eb", text: "#111111", accent: "#ff4d00", accent2: "#111111", tone: "poster, graffiante, giovanile" },
+  { style: "paper", font: "serif", bg: "#fbf8f1", text: "#2b2118", accent: "#7c2d12", accent2: "#a8a29e", tone: "carta, caldo, artigianale" },
+  { style: "mono", font: "mono", bg: "#0c0c0c", text: "#e8e8e8", accent: "#84cc16", accent2: "#3f3f46", tone: "tecnico, terminale, preciso" },
+  { style: "sunset", font: "sans", bg: "#160a12", text: "#fff4ec", accent: "#fb7185", accent2: "#fbbf24", tone: "caldo, cinematografico, accogliente" },
+  { style: "forest", font: "serif", bg: "#0c1712", text: "#eefaf1", accent: "#34d399", accent2: "#a3e635", tone: "naturale, calmo, biologico" },
+  { style: "chrome", font: "sans", bg: "#101114", text: "#f8fafc", accent: "#94a3b8", accent2: "#38bdf8", tone: "metallico, deciso, hi-tech" },
+  { style: "pastel", font: "sans", bg: "#fdf7fb", text: "#2b2438", accent: "#c084fc", accent2: "#7dd3fc", tone: "dolce, chiaro, curato" },
+  { style: "riso", font: "sans", bg: "#f6f2e8", text: "#14110c", accent: "#ef4444", accent2: "#2563eb", tone: "stampa d'autore, grafico, ironico" },
+  { style: "blueprint", font: "mono", bg: "#071b2e", text: "#e6f3ff", accent: "#60a5fa", accent2: "#93c5fd", tone: "progetto tecnico, preciso, ingegneristico" },
 ] as const;
 
 // Schema esplicito dei contenuti di un blocco: senza le proprietà, Gemini omette i dati.
@@ -163,8 +173,25 @@ const FUNCTION_DECLARATIONS = [
         accent2: { type: "STRING", description: "Secondo accento per i gradienti" },
         style: {
           type: "STRING",
-          enum: ["aurora", "neon", "editorial", "luxury", "glass", "minimal"],
-          description: "Carattere visivo della pagina",
+          enum: [
+            "aurora",
+            "neon",
+            "editorial",
+            "luxury",
+            "glass",
+            "minimal",
+            "brutal",
+            "paper",
+            "mono",
+            "sunset",
+            "forest",
+            "chrome",
+            "pastel",
+            "riso",
+            "blueprint",
+          ],
+          description:
+            "Carattere visivo: aurora (gradiente morbido), neon (scuro e acceso), editorial (rivista), luxury (raffinato), glass (vetro), minimal (sobrio), brutal (poster con bordi netti), paper (carta chiara), mono (tecnico), sunset (tramonto caldo, gradiente ampio), forest (naturale, verde e aria), chrome (metallico, contrasto alto, maiuscole), pastel (chiaro, tondeggiante, delicato), riso (stampa a due inchiostri, puntinato), blueprint (progetto tecnico, griglia sottile)"
         },
         font: { type: "STRING", enum: ["sans", "serif", "mono"], description: "Famiglia tipografica" },
       },
@@ -315,16 +342,6 @@ function toolsFor(mode: "html" | "blocks") {
 
 
 export async function POST(req: Request) {
-  if (!aiConfigured()) {
-    return NextResponse.json(
-      {
-        error:
-          "Assistente AI non configurato: imposta GEMINI_API_KEY, oppure GOOGLE_VERTEX_API_KEY / GOOGLE_SERVICE_ACCOUNT_JSON per Vertex AI.",
-      },
-      { status: 500 },
-    );
-  }
-
   const body = (await req.json().catch(() => null)) as {
     siteId?: string;
     message?: string;
@@ -350,6 +367,18 @@ export async function POST(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Autenticazione richiesta" }, { status: 401 });
+
+  // Chiave dell'account, se l'utente ne ha salvata una: le spese vanno sul suo progetto.
+  const userAiKey = decryptSecret(user.geminiKeyCipher);
+  if (!aiConfigured(userAiKey)) {
+    return NextResponse.json(
+      {
+        error:
+          "Assistente AI non configurato: aggiungi la tua chiave Gemini in Account, oppure imposta GEMINI_API_KEY sul server.",
+      },
+      { status: 500 },
+    );
+  }
 
   const userId = user.id;
   const limit = await rateLimit(`chat:${userId}`, 40, 60 * 60 * 1000);
@@ -426,7 +455,7 @@ export async function POST(req: Request) {
   const intent: AiIntent = wantsNewLook ? "page" : "edit";
   let target: AiTarget;
   try {
-    target = await aiTarget(intent);
+    target = await aiTarget(intent, { apiKey: userAiKey });
   } catch (error) {
     await logError({
       source: "ai",
@@ -514,6 +543,17 @@ export async function POST(req: Request) {
       // Se abbiamo già applicato qualcosa, restituiamo la pagina aggiornata invece di perdere tutto.
       if (calls.length) {
         const fallback = texts.join(" ").trim() || "Ho aggiornato la pagina.";
+        // Anche questo percorso salva dell'HTML generato: senza gli stessi
+        // controlli del percorso normale un errore a metà giro salverebbe una
+        // pagina troncata, non sanificata o con un modulo di pagamento.
+        let salvage = site;
+        if (salvage.html) {
+          salvage = { ...salvage, html: sanitizeHtmlStrict(salvage.html) };
+          if (validateHtml(salvage.html ?? "").length || riskyMarkup(salvage.html ?? "")) {
+            salvage = { ...salvage, html: record.config.html };
+          }
+        }
+        site = salvage;
         await updateSite(siteId, { config: site });
         revalidateTag(`site:${record.slug}`, { expire: 0 });
         await flushUsage();

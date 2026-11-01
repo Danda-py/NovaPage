@@ -29,7 +29,10 @@ export function aiModel(intent: AiIntent = "edit"): string {
   return base;
 }
 
-export function aiConfigured(): boolean {
+export function aiConfigured(userKey?: string | null): boolean {
+  // La chiave personale dell'utente vale quanto quella dell'installazione, e
+  // aiTarget la preferisce comunque: qualunque provider sia configurato.
+  if (userKey?.trim()) return true;
   if (aiProvider() === "vertex") {
     return Boolean(env("GOOGLE_VERTEX_API_KEY") || serviceAccount());
   }
@@ -123,8 +126,24 @@ export type AiTarget = {
 };
 
 /** Dove mandare la richiesta: AI Studio oppure Vertex (API key o service account). */
-export async function aiTarget(intent: AiIntent = "edit"): Promise<AiTarget> {
+export async function aiTarget(
+  intent: AiIntent = "edit",
+  options: { apiKey?: string | null } = {},
+): Promise<AiTarget> {
   const model = aiModel(intent);
+  const userKey = options.apiKey?.trim();
+
+  // Chiave dell'utente: AI Studio, indipendentemente da come è configurata
+  // l'installazione. Il modello resta quello scelto dalla piattaforma.
+  if (userKey) {
+    return {
+      provider: "gemini",
+      label: "Gemini (tua chiave)",
+      model,
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      headers: { "Content-Type": "application/json", "x-goog-api-key": userKey },
+    };
+  }
 
   if (aiProvider() === "vertex") {
     const apiKey = env("GOOGLE_VERTEX_API_KEY");

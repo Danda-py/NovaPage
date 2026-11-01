@@ -100,8 +100,8 @@ const features = [
     text: "Moduli che salvano i lead e statistiche su visite e clic dei pulsanti.",
   },
   {
-    title: "Sei stili, zero template uguali",
-    text: "Aurora, neon, editorial, luxury, glass, minimal: la pagina cambia carattere.",
+    title: "Nove stili, zero template uguali",
+    text: "Aurora, neon, editoriale, luxury, glass, minimal, brutal, carta, mono, tramonto, bosco, cromato, pastello, riso, blueprint: e se non bastano, costruisci il tuo.",
   },
 ];
 

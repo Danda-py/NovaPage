@@ -1,5 +1,16 @@
-import type { Block, BlockData, ButtonIcon, LinkButton, Site, Theme, ThemeFont } from "@/lib/site";
+import {
+  DEFAULT_LOOK,
+  type Block,
+  type BlockData,
+  type ButtonIcon,
+  type LinkButton,
+  type Site,
+  type Theme,
+  type ThemeLook,
+  type ThemeStyle,
+} from "@/lib/site";
 import { legibleAccent, readableOn } from "@/lib/colors";
+import { fontStack } from "@/lib/fonts";
 import { srcSetFor } from "@/lib/images";
 import { LeadForm } from "@/components/LeadForm";
 import { InfoBlock } from "@/components/InfoBlock";
@@ -111,25 +122,304 @@ function Icon({ name }: { name?: ButtonIcon }) {
   );
 }
 
-const FONTS: Record<ThemeFont, string> = {
-  sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-  serif: 'ui-serif, Georgia, Cambria, "Times New Roman", serif',
-  mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+const RADIUS: Record<NonNullable<Theme["look"]>["radius"], string> = {
+  sharp: "2px",
+  small: "10px",
+  medium: "18px",
+  large: "26px",
+  pill: "9999px",
 };
 
+const DENSITY: Record<NonNullable<Theme["look"]>["density"], { gap: number; pad: number }> = {
+  compact: { gap: 24, pad: 10 },
+  normal: { gap: 34, pad: 14 },
+  airy: { gap: 46, pad: 20 },
+};
+
+/**
+ * Ogni stile è una combinazione diversa di questi assi, non solo un altro
+ * colore d'accento: raggio, bordi, ombre, densità e maiuscole cambiano insieme.
+ * "custom" prende esattamente quello che l'utente ha scelto in "Crea personalizzato".
+ */
+function styleLook(t: Theme): ThemeLook {
+  if (t.style === "custom") return { ...DEFAULT_LOOK, ...(t.look ?? {}) };
+
+  const looks: Record<Exclude<ThemeStyle, "custom">, ThemeLook> = {
+    aurora: { radius: "large", border: "hairline", shadow: "soft", density: "normal", caps: "labels" },
+    neon: { radius: "small", border: "solid", shadow: "strong", density: "compact", caps: "all" },
+    editorial: { radius: "sharp", border: "hairline", shadow: "none", density: "airy", caps: "all" },
+    luxury: { radius: "sharp", border: "solid", shadow: "none", density: "airy", caps: "labels" },
+    glass: { radius: "large", border: "hairline", shadow: "soft", density: "normal", caps: "none" },
+    minimal: { radius: "small", border: "hairline", shadow: "none", density: "compact", caps: "none" },
+    brutal: { radius: "sharp", border: "solid", shadow: "strong", density: "compact", caps: "all" },
+    paper: { radius: "sharp", border: "hairline", shadow: "none", density: "airy", caps: "labels" },
+    mono: { radius: "sharp", border: "solid", shadow: "none", density: "compact", caps: "labels" },
+    sunset: { radius: "large", border: "none", shadow: "strong", density: "normal", caps: "none" },
+    forest: { radius: "medium", border: "hairline", shadow: "soft", density: "airy", caps: "labels" },
+    chrome: { radius: "sharp", border: "solid", shadow: "strong", density: "compact", caps: "all" },
+    pastel: { radius: "pill", border: "none", shadow: "soft", density: "airy", caps: "none" },
+    riso: { radius: "sharp", border: "solid", shadow: "none", density: "normal", caps: "all" },
+    blueprint: { radius: "sharp", border: "hairline", shadow: "none", density: "compact", caps: "labels" },
+  };
+  return looks[t.style];
+}
+
+/**
+ * Gli assi del layout, non solo del colore: ogni stile ha una sua gerarchia,
+ * un suo modo di disegnare le card e i pulsanti e una sua decorazione dei titoli.
+ * È ciò che rende "glass" riconoscibile da "editorial" anche con gli stessi colori.
+ */
+type StyleTraits = {
+  /** Impaginazione da rivista: hero a sinistra, righe sottili, catalogo a elenco. */
+  editorial: boolean;
+  /** Hero centrato. */
+  centered: boolean;
+  /** Titolo con testo a gradiente. */
+  gradientHeadline: boolean;
+  /** 0 nessuna card, 1 card leggera, 2 card con bordo netto, 3 vetro sfumato. */
+  surface: 0 | 1 | 2 | 3;
+  button: "gradient" | "solid" | "hard" | "soft";
+  imageRadius: string;
+  divider: "line" | "double" | "bar" | "none";
+  titleSize: string;
+};
+
+const STYLE_TRAITS: Record<Exclude<ThemeStyle, "custom">, StyleTraits> = {
+  aurora: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: true,
+    surface: 1,
+    button: "gradient",
+    imageRadius: "18px",
+    divider: "line",
+    titleSize: "2.2rem",
+  },
+  neon: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: true,
+    surface: 2,
+    button: "gradient",
+    imageRadius: "10px",
+    divider: "bar",
+    titleSize: "2.1rem",
+  },
+  editorial: {
+    editorial: true,
+    centered: false,
+    gradientHeadline: false,
+    surface: 0,
+    button: "solid",
+    imageRadius: "4px",
+    divider: "line",
+    titleSize: "2.7rem",
+  },
+  luxury: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: false,
+    surface: 0,
+    button: "solid",
+    imageRadius: "2px",
+    divider: "double",
+    titleSize: "2.8rem",
+  },
+  glass: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: false,
+    surface: 3,
+    button: "soft",
+    imageRadius: "20px",
+    divider: "line",
+    titleSize: "2.2rem",
+  },
+  minimal: {
+    editorial: false,
+    centered: false,
+    gradientHeadline: false,
+    surface: 0,
+    button: "solid",
+    imageRadius: "8px",
+    divider: "none",
+    titleSize: "1.95rem",
+  },
+  brutal: {
+    editorial: false,
+    centered: false,
+    gradientHeadline: false,
+    surface: 2,
+    button: "hard",
+    imageRadius: "0px",
+    divider: "bar",
+    titleSize: "2.6rem",
+  },
+  paper: {
+    editorial: true,
+    centered: false,
+    gradientHeadline: false,
+    surface: 0,
+    button: "solid",
+    imageRadius: "2px",
+    divider: "line",
+    titleSize: "2.5rem",
+  },
+  mono: {
+    editorial: false,
+    centered: false,
+    gradientHeadline: false,
+    surface: 1,
+    button: "hard",
+    imageRadius: "0px",
+    divider: "bar",
+    titleSize: "2rem",
+  },
+  sunset: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: true,
+    surface: 1,
+    button: "gradient",
+    imageRadius: "24px",
+    divider: "line",
+    titleSize: "2.4rem",
+  },
+  forest: {
+    editorial: false,
+    centered: false,
+    gradientHeadline: false,
+    surface: 1,
+    button: "soft",
+    imageRadius: "26px",
+    divider: "line",
+    titleSize: "2.3rem",
+  },
+  chrome: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: true,
+    surface: 2,
+    button: "hard",
+    imageRadius: "0px",
+    divider: "bar",
+    titleSize: "2.5rem",
+  },
+  pastel: {
+    editorial: false,
+    centered: true,
+    gradientHeadline: false,
+    surface: 3,
+    button: "soft",
+    imageRadius: "28px",
+    divider: "line",
+    titleSize: "2.25rem",
+  },
+  riso: {
+    editorial: true,
+    centered: false,
+    gradientHeadline: false,
+    surface: 2,
+    button: "hard",
+    imageRadius: "2px",
+    divider: "double",
+    titleSize: "2.6rem",
+  },
+  blueprint: {
+    editorial: true,
+    centered: false,
+    gradientHeadline: false,
+    surface: 0,
+    button: "solid",
+    imageRadius: "0px",
+    divider: "double",
+    titleSize: "2.2rem",
+  },
+};
+
+function styleTraits(style: ThemeStyle, look: ThemeLook): StyleTraits {
+  if (style !== "custom") return STYLE_TRAITS[style];
+  // Lo stile personalizzato ricava il trattamento delle superfici dagli assi scelti.
+  return {
+    editorial: false,
+    centered: true,
+    gradientHeadline: false,
+    surface: look.border === "none" ? 0 : look.border === "solid" ? 2 : 1,
+    button: "solid",
+    imageRadius: RADIUS[look.radius],
+    divider: "line",
+    titleSize: "2.2rem",
+  };
+}
+
 function tokens(t: Theme) {
-  const editorial = t.style === "editorial" || t.style === "luxury";
+  const look = styleLook(t);
+  const traits = styleTraits(t.style, look);
+  const radius = RADIUS[look.radius];
+  const density = DENSITY[look.density];
+  const { editorial, centered, gradientHeadline } = traits;
+
+  const bodyFont = fontStack(t.fonts?.body ?? t.font);
+  const headingFont = fontStack(t.fonts?.heading ?? t.font);
+  const labelFont = fontStack(t.fonts?.label ?? t.font);
+  const serif = /serif/i.test(headingFont);
+
+  const cardShadow =
+    traits.surface === 2 && t.style === "brutal"
+      ? `5px 5px 0 ${alpha(t.text_color, 0.9)}`
+      : look.shadow === "none"
+        ? undefined
+        : look.shadow === "strong"
+          ? `0 22px 60px -20px ${alpha(t.accent_color, 0.55)}`
+          : "0 14px 36px -24px rgba(0, 0, 0, 0.8)";
+
   return {
     soft: alpha(t.text_color, 0.66),
-    faint: alpha(t.text_color, t.style === "glass" ? 0.09 : 0.05),
-    line: alpha(t.text_color, editorial ? 0.18 : 0.12),
-    radius: editorial ? "10px" : t.style === "neon" ? "12px" : "22px",
+    faint: alpha(t.text_color, traits.surface === 3 ? 0.1 : 0.05),
+    line: alpha(t.text_color, look.border === "none" ? 0.05 : 0.13),
+    border: `${look.border === "none" ? 0 : 1}px solid ${
+      look.border === "solid" ? alpha(t.accent_color, 0.55) : alpha(t.text_color, 0.16)
+    }`,
+    radius,
+    buttonRadius: look.radius === "pill" ? "9999px" : look.radius === "sharp" ? "2px" : radius,
     gradient: `linear-gradient(135deg, ${t.accent_color}, ${t.accent2})`,
     glow: `0 14px 40px -14px ${alpha(t.accent_color, 0.75)}`,
+    cardShadow,
+    gap: density.gap,
+    pad: density.pad,
     editorial,
-    serif: t.font === "serif",
-    vivid: t.style === "aurora" || t.style === "neon",
-    hairline: `1px solid ${alpha(t.text_color, 0.16)}`,
+    centered,
+    serif,
+    vivid: gradientHeadline,
+    hairline: `${look.border === "none" ? 0 : 1}px solid ${alpha(t.text_color, 0.16)}`,
+    bodyFont,
+    headingFont,
+    labelFont,
+    titleSize: traits.titleSize,
+    titleWeight: serif ? 600 : t.style === "brutal" ? 900 : 800,
+    titleSpacing: t.style === "neon" || t.style === "brutal" ? "0.02em" : serif ? "-0.01em" : "-0.035em",
+    titleTransform: look.caps === "all" ? ("uppercase" as const) : undefined,
+    labelTransform: look.caps === "none" ? undefined : ("uppercase" as const),
+    labelSpacing:
+      t.style === "neon" || t.style === "mono" || t.style === "luxury" || t.style === "chrome"
+        ? "0.3em"
+        : "0.2em",
+    look,
+    traits,
+    imageRadius: traits.imageRadius,
+    /** Superficie delle card: null quando lo stile vive di righe sottili. */
+    card: traits.surface
+      ? {
+          backgroundColor: t.style === "brutal" ? t.bg_color : alpha(t.text_color, traits.surface === 3 ? 0.1 : 0.05),
+          border:
+            traits.surface === 2
+              ? `2px solid ${alpha(t.text_color, t.style === "brutal" ? 0.9 : 0.35)}`
+              : `1px solid ${alpha(t.text_color, 0.14)}`,
+          borderRadius: radius,
+          boxShadow: cardShadow,
+          backdropFilter: traits.surface === 3 ? "blur(16px)" : undefined,
+        }
+      : null,
   };
 }
 
@@ -138,12 +428,15 @@ type Tokens = ReturnType<typeof tokens>;
 export function SitePreview({
   site,
   siteId,
+  slug,
   onSelectBlock,
   selectedBlockId,
   preview = !siteId,
 }: {
   site: Site;
   siteId?: string;
+  /** Slug pubblico: serve ai link legali della pagina (informativa del modulo). */
+  slug?: string;
   onSelectBlock?: (blockId: string) => void;
   selectedBlockId?: string | null;
   /** In anteprima si mostrano anche i segnaposto (link da collegare, modulo demo). */
@@ -160,19 +453,69 @@ export function SitePreview({
   const quietBackdrop = {
     backgroundImage: `linear-gradient(180deg, ${alpha(t.accent_color, 0.1)}, transparent 38%)`,
   };
+  // Ogni stile ha un fondale diverso: alone, griglia, gradiente tenue, righe o nulla.
+  const backdrop =
+    t.style === "neon"
+      ? {
+          backgroundImage: `radial-gradient(60% 40% at 50% -10%, ${alpha(t.accent_color, 0.35)}, transparent 70%), linear-gradient(${alpha(t.text_color, 0.06)} 1px, transparent 1px), linear-gradient(90deg, ${alpha(t.text_color, 0.06)} 1px, transparent 1px)`,
+          backgroundSize: "auto, 28px 28px, 28px 28px",
+        }
+      : t.style === "riso"
+        ? {
+            backgroundImage: `radial-gradient(circle, ${alpha(t.text_color, 0.16)} 1px, transparent 1.4px)`,
+            backgroundSize: "9px 9px",
+          }
+        : t.style === "blueprint"
+          ? {
+              backgroundImage: `linear-gradient(${alpha(t.accent_color, 0.16)} 1px, transparent 1px), linear-gradient(90deg, ${alpha(t.accent_color, 0.16)} 1px, transparent 1px)`,
+              backgroundSize: "24px 24px, 24px 24px",
+            }
+          : k.editorial
+            ? quietBackdrop
+            : t.style === "glass"
+          ? {
+              backgroundImage: `radial-gradient(70% 50% at 20% 0%, ${alpha(t.accent_color, 0.22)}, transparent 70%), radial-gradient(60% 40% at 90% 20%, ${alpha(t.accent2, 0.18)}, transparent 70%)`,
+            }
+          : t.style === "brutal"
+            ? {
+                backgroundImage: `repeating-linear-gradient(135deg, ${alpha(t.text_color, 0.05)} 0 1px, transparent 1px 14px)`,
+              }
+            : t.style === "mono"
+              ? {
+                  backgroundImage: `linear-gradient(90deg, ${alpha(t.accent_color, 0.14)} 0 1px, transparent 1px)`,
+                  backgroundSize: "12.5% 100%",
+                }
+              : t.style === "minimal" || t.style === "paper"
+                ? undefined
+                : t.style === "sunset"
+                  ? {
+                      backgroundImage: `radial-gradient(85% 55% at 50% -5%, ${alpha(t.accent_color, 0.4)}, transparent 68%), radial-gradient(70% 45% at 90% 30%, ${alpha(t.accent2, 0.26)}, transparent 72%)`,
+                    }
+                  : t.style === "forest"
+                    ? {
+                        backgroundImage: `radial-gradient(60% 45% at 15% 0%, ${alpha(t.accent_color, 0.24)}, transparent 72%), radial-gradient(50% 40% at 95% 40%, ${alpha(t.accent2, 0.18)}, transparent 74%)`,
+                      }
+                    : t.style === "chrome"
+                      ? {
+                          backgroundImage: `linear-gradient(155deg, ${alpha(t.accent_color, 0.22)}, transparent 42%, ${alpha(t.accent2, 0.2)} 78%, transparent)`,
+                        }
+                      : t.style === "pastel"
+                        ? {
+                            backgroundImage: `radial-gradient(70% 45% at 25% 0%, ${alpha(t.accent_color, 0.16)}, transparent 74%), radial-gradient(60% 40% at 85% 25%, ${alpha(t.accent2, 0.14)}, transparent 76%)`,
+                          }
+                        : glowBackdrop;
 
   return (
     <div
       className="relative min-h-full w-full overflow-hidden"
-      style={{ backgroundColor: t.bg_color, color: t.text_color, fontFamily: FONTS[t.font] }}
+      style={{ backgroundColor: t.bg_color, color: t.text_color, fontFamily: k.bodyFont }}
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={k.editorial ? quietBackdrop : glowBackdrop}
-        aria-hidden
-      />
+      <div className="pointer-events-none absolute inset-0" style={backdrop} aria-hidden />
 
-      <div className="relative mx-auto flex w-full max-w-md flex-col gap-8 px-5 pb-16 pt-12">
+      <div
+        className="relative mx-auto flex w-full max-w-md flex-col px-5 pb-16 pt-12"
+        style={{ gap: k.gap, paddingTop: 48 + k.pad, paddingBottom: 64 + k.pad }}
+      >
         {t.style === "neon" && (
           <span
             className="mx-auto h-px w-16"
@@ -208,10 +551,10 @@ export function SitePreview({
               >
                 Modifica
               </span>
-              <BlockView block={block} theme={t} k={k} siteId={siteId} preview={preview} />
+              <BlockView block={block} theme={t} k={k} siteId={siteId} slug={slug} preview={preview} />
             </div>
           ) : (
-            <BlockView key={block.id} block={block} theme={t} k={k} siteId={siteId} preview={preview} />
+            <BlockView key={block.id} block={block} theme={t} k={k} siteId={siteId} slug={slug} preview={preview} />
           ),
         )}
 
@@ -252,19 +595,36 @@ export function SitePreview({
 }
 
 function SectionTitle({ children, t, k }: { children: React.ReactNode; t: Theme; k: Tokens }) {
+  const divider = k.traits.divider;
   return (
     <div className="mb-3.5 flex items-center gap-2.5">
-      <span
-        className="h-px w-4 shrink-0"
-        style={{ backgroundColor: t.accent_color }}
-        aria-hidden
-      />
+      {divider === "none" ? null : divider === "bar" ? (
+        <span
+          className="h-2.5 w-[3px] shrink-0"
+          style={{ backgroundColor: t.accent_color }}
+          aria-hidden
+        />
+      ) : (
+        <span
+          className="h-px w-4 shrink-0"
+          style={{ backgroundColor: t.accent_color }}
+          aria-hidden
+        />
+      )}
       <h2
-        className="text-[10px] font-semibold uppercase tracking-[0.24em]"
-        style={{ color: alpha(t.text_color, 0.72), letterSpacing: k.editorial ? "0.28em" : "0.2em" }}
+        className="text-[10px] font-semibold"
+        style={{
+          color: alpha(t.text_color, 0.72),
+          fontFamily: k.labelFont,
+          letterSpacing: k.labelSpacing,
+          textTransform: k.labelTransform,
+        }}
       >
         {children}
       </h2>
+      {divider === "double" && (
+        <span className="h-px flex-1" style={{ backgroundColor: k.line }} aria-hidden />
+      )}
     </div>
   );
 }
@@ -274,27 +634,31 @@ function BlockView({
   theme: t,
   k,
   siteId,
+  slug,
   preview,
 }: {
   block: Block;
   theme: Theme;
   k: Tokens;
   siteId?: string;
+  slug?: string;
   preview: boolean;
 }) {
   const d: BlockData = block.data;
-  const card = {
-    backgroundColor: k.faint,
-    borderColor: k.line,
-    borderRadius: k.radius,
-    backdropFilter: t.style === "glass" ? "blur(14px)" : undefined,
-  } as const;
+  // La superficie viene dallo stile: c'è chi vive di card e chi di righe sottili.
+  const card = k.card ?? {
+    backgroundColor: "transparent",
+    border: "0",
+    borderRadius: 0,
+  };
 
   switch (block.type) {
     case "hero": {
       if (!(d.title || d.subtitle || d.avatar || d.badge)) return null;
       return (
-        <section className="flex flex-col items-center text-center">
+        <section
+          className={`flex flex-col ${k.centered ? "items-center text-center" : "items-start text-left"}`}
+        >
           {d.avatar && isUsableUrl(d.avatar) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -317,8 +681,13 @@ function BlockView({
           {d.badge &&
             (k.editorial ? (
               <span
-                className="mb-3 text-[10px] font-medium uppercase tracking-[0.3em]"
-                style={{ color: t.accent_color }}
+                className="mb-3 text-[10px] font-medium tracking-[0.3em]"
+                style={{
+                  color: t.accent_color,
+                  fontFamily: k.labelFont,
+                  letterSpacing: k.labelSpacing,
+                  textTransform: "uppercase",
+                }}
               >
                 {d.badge}
               </span>
@@ -326,7 +695,8 @@ function BlockView({
               <span
                 className="mb-3 inline-block px-3 py-1 text-[11px] font-semibold tracking-wide"
                 style={{
-                  borderRadius: "9999px",
+                  fontFamily: k.labelFont,
+                  borderRadius: k.buttonRadius,
                   backgroundColor: alpha(t.accent_color, 0.16),
                   color: legibleAccent(t.accent_color, t.bg_color),
                   border: `1px solid ${alpha(t.accent_color, 0.28)}`,
@@ -335,6 +705,14 @@ function BlockView({
                 {d.badge}
               </span>
             ))}
+
+          {k.traits.divider === "double" && (
+            <span className="mb-4 flex w-full items-center gap-2" aria-hidden>
+              <span className="h-px flex-1" style={{ backgroundColor: alpha(t.accent_color, 0.35) }} />
+              <span className="h-1 w-1 rotate-45" style={{ backgroundColor: t.accent_color }} />
+              <span className="h-px flex-1" style={{ backgroundColor: alpha(t.accent_color, 0.35) }} />
+            </span>
+          )}
 
           {k.editorial && (
             <span
@@ -353,10 +731,12 @@ function BlockView({
             <h1
               className="text-balance"
               style={{
-                fontSize: k.editorial ? "2.55rem" : "2.15rem",
+                fontSize: k.titleSize,
                 lineHeight: 1.04,
-                fontWeight: k.serif ? 500 : 800,
-                letterSpacing: k.serif ? "-0.01em" : "-0.035em",
+                fontWeight: k.titleWeight,
+                letterSpacing: k.titleSpacing,
+                fontFamily: k.headingFont,
+                textTransform: k.titleTransform,
                 ...(k.vivid && !k.serif
                   ? {
                       backgroundImage: k.gradient,
@@ -372,10 +752,15 @@ function BlockView({
           )}
 
           {d.subtitle &&
-            (k.editorial ? (
+            (t.style === "editorial" ? (
               <p
-                className="mt-4 max-w-[21rem] text-[11px] uppercase leading-relaxed"
-                style={{ color: t.accent_color, letterSpacing: "0.26em" }}
+                className="mt-4 max-w-[21rem] text-[11px] leading-relaxed"
+                style={{
+                  color: t.accent_color,
+                  fontFamily: k.labelFont,
+                  letterSpacing: "0.26em",
+                  textTransform: "uppercase",
+                }}
               >
                 {d.subtitle}
               </p>
@@ -404,14 +789,15 @@ function BlockView({
         <section
           className="px-4 py-3.5 text-center text-[12.5px] font-semibold leading-snug"
           style={{
-            borderRadius: k.radius,
+            borderRadius: k.buttonRadius,
+            fontFamily: k.labelFont,
             backgroundImage:
               t.style === "neon"
                 ? k.gradient
                 : `linear-gradient(135deg, ${alpha(t.accent_color, 0.2)}, ${alpha(t.accent2, 0.14)})`,
-            color: t.style === "neon" ? "#0a0a0a" : t.accent_color,
+            color: t.style === "neon" ? "#0a0a0a" : legibleAccent(t.accent_color, t.bg_color),
             border: `1px solid ${alpha(t.accent_color, 0.3)}`,
-            letterSpacing: t.style === "neon" ? "0.04em" : undefined,
+            letterSpacing: k.labelSpacing,
           }}
         >
           {d.text}
@@ -462,6 +848,36 @@ function BlockView({
           );
         }
         const ghost = b.variant === "ghost";
+        const skin = k.traits.button;
+        const style: React.CSSProperties = {
+          borderRadius: k.buttonRadius,
+          fontFamily: k.labelFont,
+          letterSpacing: k.labelSpacing,
+          textTransform: k.labelTransform,
+        };
+        if (ghost) {
+          style.color = custom ?? t.text_color;
+          style.backgroundColor = alpha(custom ?? t.text_color, 0.06);
+          style.border = `1px solid ${alpha(accent, 0.45)}`;
+        } else if (custom || skin === "solid" || skin === "hard") {
+          // Tinta piena: nessun gradiente, così editorial, paper e minimal restano sobri.
+          // "hard" aggiunge bordo netto e ombra piena, senza sfumature.
+          style.color = readableOn(custom ?? t.accent_color);
+          style.backgroundColor = custom ?? t.accent_color;
+          style.border = skin === "hard" ? `2px solid ${alpha(t.text_color, 0.9)}` : "1px solid transparent";
+          style.boxShadow = skin === "hard" ? `4px 4px 0 ${alpha(t.text_color, 0.9)}` : undefined;
+        } else if (skin === "soft") {
+          // Velo: il vetro colora senza spegnere il fondale.
+          style.color = legibleAccent(accent, t.bg_color);
+          style.backgroundColor = alpha(accent, 0.16);
+          style.border = `1px solid ${alpha(accent, 0.42)}`;
+          style.backdropFilter = "blur(10px)";
+        } else {
+          style.color = readableOn(accent);
+          style.backgroundImage = k.gradient;
+          style.border = "1px solid transparent";
+          style.boxShadow = k.look.shadow === "none" ? undefined : k.glow;
+        }
         return (
           <a
             key={i}
@@ -469,22 +885,7 @@ function BlockView({
             target="_blank"
             rel="noopener noreferrer"
             className="flex w-full items-center justify-center gap-2.5 py-3.5 text-[13.5px] font-semibold transition-transform active:scale-[0.99]"
-            style={{
-              borderRadius: k.radius,
-              color: ghost ? (custom ?? t.text_color) : readableOn(custom ?? t.accent_color),
-              backgroundImage: !ghost && !custom && k.vivid ? k.gradient : undefined,
-              backgroundColor: ghost
-                ? alpha(custom ?? t.text_color, 0.06)
-                : custom
-                  ? custom
-                  : k.vivid
-                    ? undefined
-                    : t.accent_color,
-              border: ghost ? `1px solid ${alpha(accent, 0.45)}` : "1px solid transparent",
-              boxShadow: !ghost && k.vivid ? `0 14px 40px -14px ${alpha(accent, 0.75)}` : undefined,
-              letterSpacing: t.style === "neon" ? "0.05em" : undefined,
-              textTransform: t.style === "neon" ? "uppercase" : undefined,
-            }}
+            style={style}
           >
             <Icon name={b.icon} />
             {b.label}
@@ -523,17 +924,17 @@ function BlockView({
                       loading="lazy"
                       decoding="async"
                       className="h-14 w-14 shrink-0 object-cover"
-                      style={{ borderRadius: "6px" }}
+                      style={{ borderRadius: k.imageRadius }}
                     />
                   ) : (
                     <div
                       className="flex h-14 w-14 shrink-0 items-center justify-center text-[15px] font-semibold"
                       style={{
-                        borderRadius: "6px",
+                        borderRadius: k.imageRadius,
                         border: k.hairline,
                         color: alpha(t.text_color, 0.6),
                         backgroundColor: k.faint,
-                        fontFamily: k.serif ? FONTS.serif : undefined,
+                        fontFamily: k.headingFont,
                       }}
                       aria-hidden
                     >
@@ -560,7 +961,7 @@ function BlockView({
                           {p.compareAtPrice}
                         </span>
                       )}
-                      <span className="text-[13.5px] font-semibold" style={{ color: t.accent_color }}>
+                      <span className="text-[13.5px] font-semibold" style={{ color: legibleAccent(t.accent_color, t.bg_color) }}>
                         {p.price}
                       </span>
                       {p.lowestPrice30 && (
@@ -580,7 +981,7 @@ function BlockView({
       const cardNode = (p: (typeof items)[number], extraClass = "") => {
         const soldOut = /sold|esaurito/i.test(p.status ?? "");
         return (
-          <article key={p.id} className={`overflow-hidden border ${extraClass}`} style={card}>
+          <article key={p.id} className={`overflow-hidden ${extraClass}`} style={card}>
                   {p.image && isUsableUrl(p.image) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -598,11 +999,14 @@ function BlockView({
                     <div
                       className="flex aspect-square w-full items-center justify-center"
                       style={{
-                        backgroundImage: `linear-gradient(150deg, ${alpha(t.accent_color, 0.22)}, ${alpha(t.accent2, 0.12)})`,
+                        backgroundImage: k.card
+                          ? `linear-gradient(150deg, ${alpha(t.accent_color, 0.22)}, ${alpha(t.accent2, 0.12)})`
+                          : undefined,
+                        backgroundColor: k.card ? undefined : k.faint,
                         color: alpha(t.text_color, 0.6),
                         fontSize: "1.7rem",
                         fontWeight: k.serif ? 500 : 700,
-                        fontFamily: k.serif ? FONTS.serif : undefined,
+                        fontFamily: k.headingFont,
                       }}
                       aria-hidden
                     >
@@ -631,7 +1035,7 @@ function BlockView({
                           )}
                           <span
                             className="text-[13px] font-bold"
-                            style={{ color: t.accent_color, fontFamily: k.serif ? FONTS.serif : undefined }}
+                            style={{ color: legibleAccent(t.accent_color, t.bg_color), fontFamily: k.headingFont }}
                           >
                             {p.price}
                           </span>
@@ -685,7 +1089,7 @@ function BlockView({
       return (
         <section>
           {d.title && <SectionTitle t={t} k={k}>{d.title}</SectionTitle>}
-          <div className={k.editorial ? "" : "border px-4"} style={k.editorial ? undefined : card}>
+          <div className={k.card ? "px-4" : ""} style={k.card ?? { borderTop: k.hairline }}>
             {rows.map((h, i) => (
               <div
                 key={i}
@@ -705,7 +1109,7 @@ function BlockView({
       const images = (d.images ?? []).filter(isUsableUrl);
       if (!images.length) return null;
       const layout = d.layout ?? "grid";
-      const radius = k.editorial ? "4px" : "14px";
+      const radius = k.imageRadius;
 
       if (layout === "carousel") {
         return (
@@ -778,7 +1182,6 @@ function BlockView({
         <InfoBlock
           title={d.title}
           rows={rows}
-          accent={t.accent_color}
           textColor={t.text_color}
           soft={k.soft}
           line={k.line}
@@ -792,6 +1195,7 @@ function BlockView({
       return (
         <LeadForm
           siteId={siteId}
+          slug={slug}
           title={d.title}
           text={d.text}
           accent={t.accent_color}
@@ -817,13 +1221,13 @@ function BlockView({
 
       return (
         <section
-          className={k.editorial ? "text-center" : "border p-4 text-center"}
-          style={k.editorial ? { borderTop: k.hairline, paddingTop: "1.25rem" } : card}
+          className={`text-center ${k.card ? "p-4" : ""}`}
+          style={k.card ?? { borderTop: k.hairline, paddingTop: "1.25rem" }}
         >
           {d.title && (
             <h2
               className="text-[15px] font-semibold"
-              style={{ fontFamily: k.serif ? FONTS.serif : undefined, letterSpacing: k.serif ? "0.02em" : undefined }}
+              style={{ fontFamily: k.headingFont, letterSpacing: k.serif ? "0.02em" : undefined }}
             >
               {d.title}
             </h2>
@@ -842,10 +1246,11 @@ function BlockView({
                 className="py-3 text-[13.5px] font-semibold"
                 style={{
                   borderRadius: k.radius,
-                  backgroundImage: k.vivid ? k.gradient : undefined,
-                  backgroundColor: k.vivid ? undefined : t.accent_color,
+                  backgroundImage: k.traits.button === "gradient" ? k.gradient : undefined,
+                  backgroundColor: k.traits.button === "gradient" ? undefined : t.accent_color,
                   color: readableOn(t.accent_color),
-                  boxShadow: k.vivid ? k.glow : undefined,
+                  boxShadow: k.traits.button === "gradient" ? k.glow : undefined,
+                  border: k.traits.button === "hard" ? `2px solid ${alpha(t.text_color, 0.9)}` : undefined,
                 }}
               >
                 Scrivi su WhatsApp

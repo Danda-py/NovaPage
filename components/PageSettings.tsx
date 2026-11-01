@@ -1,15 +1,41 @@
 "use client";
 
-import { THEME_FONTS, THEME_STYLES, type Site } from "@/lib/site";
+import { useState } from "react";
+import { FONT_CHOICES, isValidFamilyName } from "@/lib/fonts";
+import {
+  DEFAULT_LOOK,
+  LOOK_OPTIONS,
+  THEME_FONTS,
+  THEME_FONT_ROLES,
+  THEME_STYLES,
+  THEME_STYLE_LABELS,
+  type Site,
+  type ThemeFontRole,
+  type ThemeLook,
+} from "@/lib/site";
 
-const STYLE_LABEL: Record<string, string> = {
-  aurora: "Aurora",
-  neon: "Neon",
-  editorial: "Editoriale",
-  luxury: "Luxury",
-  glass: "Glass",
-  minimal: "Minimal",
+const ROLE_LABEL: Record<ThemeFontRole, string> = {
+  heading: "Titoli",
+  body: "Testo",
+  label: "Etichette e pulsanti",
 };
+
+/** Etichette degli assi dello stile personalizzato, con i valori letti da LOOK_OPTIONS. */
+const LOOK_AXES: Array<{ key: keyof ThemeLook; label: string; values: Record<string, string> }> = [
+  {
+    key: "radius",
+    label: "Spigoli",
+    values: { sharp: "Netto", small: "Piccolo", medium: "Medio", large: "Ampio", pill: "A pillola" },
+  },
+  { key: "border", label: "Bordi", values: { none: "Nessuno", hairline: "Sottile", solid: "Accento" } },
+  { key: "shadow", label: "Ombre", values: { none: "Nessuna", soft: "Morbida", strong: "Marcata" } },
+  { key: "density", label: "Spaziatura", values: { compact: "Compatta", normal: "Normale", airy: "Ariosa" } },
+  {
+    key: "caps",
+    label: "Maiuscole",
+    values: { none: "Normali", labels: "Solo etichette", all: "Titoli ed etichette" },
+  },
+];
 
 const FONT_LABEL: Record<string, string> = {
   sans: "Sans (moderno)",
@@ -30,6 +56,16 @@ export function PageSettings({
 }) {
   const meta = site.meta;
   const legal = site.legal ?? {};
+  const [fontName, setFontName] = useState("");
+  const [fontError, setFontError] = useState("");
+
+  const themeFonts = site.theme.fonts ?? {};
+  const customFonts = site.theme.customFonts ?? [];
+  const look: ThemeLook = { ...DEFAULT_LOOK, ...(site.theme.look ?? {}) };
+  const fontOptions = [
+    ...FONT_CHOICES.map((font) => ({ value: font.id, label: font.label })),
+    ...customFonts.map((name) => ({ value: name, label: `${name} (importato)` })),
+  ];
 
   function setMeta(patch: Partial<Site["meta"]>) {
     onChange({ ...site, meta: { ...meta, ...patch } });
@@ -41,6 +77,50 @@ export function PageSettings({
 
   function setLegal(patch: NonNullable<Site["legal"]>) {
     onChange({ ...site, legal: { ...legal, ...patch } });
+  }
+
+  /** Un ruolo senza voce usa il font base del tema. */
+  function setRoleFont(role: ThemeFontRole, value: string) {
+    const next = { ...themeFonts };
+    if (value) next[role] = value;
+    else delete next[role];
+    setTheme({ fonts: Object.keys(next).length ? next : undefined });
+  }
+
+  function addFont(e: React.FormEvent) {
+    e.preventDefault();
+    const name = fontName.trim();
+    if (!isValidFamilyName(name)) {
+      setFontError("Nome non valido: lettere, numeri, spazi, punti o trattini.");
+      return;
+    }
+    if (customFonts.some((font) => font.toLowerCase() === name.toLowerCase())) {
+      setFontError("Hai già importato questo font.");
+      return;
+    }
+    if (customFonts.length >= 6) {
+      setFontError("Puoi importare al massimo 6 font.");
+      return;
+    }
+    setTheme({ customFonts: [...customFonts, name] });
+    setFontError("");
+    setFontName("");
+  }
+
+  function removeFont(name: string) {
+    const remaining = customFonts.filter((font) => font !== name);
+    const fonts = { ...themeFonts };
+    for (const role of THEME_FONT_ROLES) {
+      if (fonts[role] === name) delete fonts[role];
+    }
+    setTheme({
+      customFonts: remaining.length ? remaining : undefined,
+      fonts: Object.keys(fonts).length ? fonts : undefined,
+    });
+  }
+
+  function setLook(patch: Partial<ThemeLook>) {
+    setTheme({ look: { ...look, ...patch } });
   }
 
   return (
@@ -117,7 +197,7 @@ export function PageSettings({
             >
               {THEME_STYLES.map((style) => (
                 <option key={style} value={style}>
-                  {STYLE_LABEL[style] ?? style}
+                  {THEME_STYLE_LABELS[style] ?? style}
                 </option>
               ))}
             </select>
@@ -137,6 +217,119 @@ export function PageSettings({
               ))}
             </select>
           </label>
+
+          <div className="space-y-2 rounded-lg border border-zinc-800 p-2.5">
+            <p className="text-[10.5px] uppercase tracking-wider text-zinc-400">Tipografia</p>
+            <p className="text-[10.5px] leading-relaxed text-zinc-500">
+              Un font per ruolo: senza una scelta, il ruolo usa il font base qui sopra.
+            </p>
+            {THEME_FONT_ROLES.map((role) => (
+              <label key={role} className="block">
+                <span className="block text-[10.5px] uppercase tracking-wider text-zinc-500">
+                  {ROLE_LABEL[role]}
+                </span>
+                <select
+                  value={themeFonts[role] ?? ""}
+                  onChange={(e) => setRoleFont(role, e.target.value)}
+                  className={`${field} mt-1`}
+                >
+                  <option value="">Font base del tema</option>
+                  {fontOptions.map((font) => (
+                    <option key={`${role}-${font.value}`} value={font.value}>
+                      {font.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+
+            <form onSubmit={addFont} className="space-y-1.5 border-t border-zinc-800 pt-2">
+              <label className="block">
+                <span className="block text-[10.5px] uppercase tracking-wider text-zinc-500">
+                  Importa un font da Google Fonts
+                </span>
+                <div className="mt-1 flex gap-1.5">
+                  <input
+                    value={fontName}
+                    onChange={(e) => {
+                      setFontName(e.target.value);
+                      setFontError("");
+                    }}
+                    maxLength={40}
+                    placeholder="Es. Poppins"
+                    className={field}
+                    aria-label="Nome del font da importare"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!fontName.trim()}
+                    className="shrink-0 rounded-lg border border-zinc-700 px-2.5 text-[11px] text-zinc-200 hover:border-zinc-500 disabled:opacity-40"
+                  >
+                    Aggiungi
+                  </button>
+                </div>
+              </label>
+              {fontError && (
+                <p className="text-[11px] text-red-400" role="alert">
+                  {fontError}
+                </p>
+              )}
+              {customFonts.length > 0 && (
+                <ul className="flex flex-wrap gap-1.5">
+                  {customFonts.map((name) => (
+                    <li
+                      key={name}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 px-2 py-0.5 text-[10.5px] text-zinc-300"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => removeFont(name)}
+                        aria-label={`Rimuovi ${name}`}
+                        className="text-zinc-500 hover:text-red-400"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[10px] leading-relaxed text-zinc-500">
+                Il font viene caricato da Google Fonts nella pagina pubblicata; serve che esista con
+                quel nome esatto.
+              </p>
+            </form>
+          </div>
+
+          {site.theme.style === "custom" && (
+            <div className="space-y-2 rounded-lg border border-zinc-800 p-2.5">
+              <p className="text-[10.5px] uppercase tracking-wider text-zinc-400">
+                Stile personalizzato
+              </p>
+              <p className="text-[10.5px] leading-relaxed text-zinc-500">
+                Forma, bordi, profondità e ritmo: qui decidi tu, gli altri stili sono combinazioni
+                già pronte.
+              </p>
+              {LOOK_AXES.map((axis) => (
+                <label key={axis.key} className="block">
+                  <span className="block text-[10.5px] uppercase tracking-wider text-zinc-500">
+                    {axis.label}
+                  </span>
+                  <select
+                    value={look[axis.key]}
+                    onChange={(e) => setLook({ [axis.key]: e.target.value } as Partial<ThemeLook>)}
+                    className={`${field} mt-1`}
+                  >
+                    {LOOK_OPTIONS[axis.key].map((value) => (
+                      <option key={String(value)} value={String(value)}>
+                        {axis.values[String(value)] ?? String(value)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="space-y-2">
