@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { deleteSite, updateSite } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
 import { normalizeSite, withLegalAck, type Site } from "@/lib/site";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
+import { planSpec } from "@/lib/plans";
+import { riskyMarkup } from "@/lib/moderation";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -44,6 +47,15 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
     // Il parser passa sui contenuti scritti: è l'ultimo controllo prima del database.
     if (normalized.html) normalized.html = sanitizeHtmlStrict(normalized.html);
+
+    const blocked = riskyMarkup(normalized.html ?? "");
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 422 });
+
+    // Badge rimovibile solo dove il piano lo prevede: il client non decide.
+    if (normalized.hideBadge && !planSpec(guard.user.plan).hideBadge) {
+      delete normalized.hideBadge;
+    }
+
     config = withLegalAck(guard.site.config, normalized, {
       ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
       userAgent: req.headers.get("user-agent") ?? undefined,
@@ -57,6 +69,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
     published: typeof body.published === "boolean" ? body.published : undefined,
   });
   if (!site) return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
+
+  // La pagina pubblica è in cache per slug: salvataggio, rinomina e bozza devono
+  // invalidarla subito, non alla scadenza.
+  revalidateTag(`site:${site.slug}`, { expire: 0 });
+  if (guard.site.slug !== site.slug) revalidateTag(`site:${guard.site.slug}`, { expire: 0 });
   return NextResponse.json({ site });
 }
 
@@ -70,5 +87,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     );
   }
   await deleteSite(id);
+  revalidateTag(`site:${guard.site.slug}`, { expire: 0 });
   return NextResponse.json({ ok: true });
 }

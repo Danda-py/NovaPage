@@ -42,6 +42,29 @@ export async function sendEmail(input: {
   }
 }
 
+/**
+ * Avviso agli amministratori quando un errore finisce in `error_logs`.
+ * Throttle in memoria per istanza: in caso di raffica di errori non vogliamo
+ * cento email, e perderne qualcuna è accettabile per un alert.
+ */
+const lastAlert = new Map<string, number>();
+
+export async function notifyAdmin(input: { source: string; message: string }): Promise<boolean> {
+  const to = process.env.ADMIN_EMAIL;
+  if (!to || !emailConfigured()) return false;
+
+  const now = Date.now();
+  if ((lastAlert.get(input.source) ?? 0) > now - 10 * 60 * 1000) return false;
+  lastAlert.set(input.source, now);
+
+  return sendEmail({
+    to,
+    subject: `[NovaPage] errore in ${input.source}`,
+    html: securityEmailHtml({ title: `Errore in ${input.source}`, body: input.message }),
+    text: `Errore in ${input.source}: ${input.message}`,
+  });
+}
+
 export function resetEmailHtml(link: string): string {
   return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
   <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">NovaPage</p>
@@ -53,6 +76,19 @@ export function resetEmailHtml(link: string): string {
     Scegli una nuova password
   </a>
   <p style="font-size:12px;color:#52525b;margin:24px 0 0">${link}</p>
+</div>`;
+}
+
+/**
+ * Avviso di sicurezza: password o email cambiate. Se non sei stato tu, l'utente
+ * deve poterlo capire subito da un messaggio che non dipende dal sito.
+ */
+export function securityEmailHtml(input: { title: string; body: string }): string {
+  return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
+  <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">NovaPage</p>
+  <h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(input.title)}</h1>
+  <p style="font-size:14px;line-height:1.6;color:#a1a1aa;margin:0 0 16px">${escapeHtml(input.body)}</p>
+  <p style="font-size:12px;line-height:1.6;color:#52525b;margin:0">Se non sei stato tu, rispondi a questa email o reimposta subito la password dalla pagina di accesso.</p>
 </div>`;
 }
 

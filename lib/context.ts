@@ -9,16 +9,26 @@ const RECENT_CHARS = 700;
  * Costruisce il contesto da inviare al modello senza perdere la chat visibile:
  * gli ultimi messaggi restano integrali, i più vecchi vengono compressi in un riassunto.
  */
-export function buildConversationContext(chat: ChatMessage[]): string {
+/**
+ * Per le correzioni mirate bastano gli ultimi scambi: mandare tutta la
+ * cronologia costa token a ogni richiesta senza cambiare il risultato.
+ */
+export function buildConversationContext(
+  chat: ChatMessage[],
+  options: { recent?: number; recap?: number } = {},
+): string {
   if (!chat.length) return "";
 
-  const recent = chat.slice(-RECENT_FULL);
-  const older = chat.slice(0, Math.max(0, chat.length - RECENT_FULL));
+  const recentCount = Math.max(1, options.recent ?? RECENT_FULL);
+  const recapCount = Math.max(0, options.recap ?? RECAP_ITEMS);
+
+  const recent = chat.slice(-recentCount);
+  const older = chat.slice(0, Math.max(0, chat.length - recentCount));
 
   const recap: string[] = [];
-  const kept = older.slice(-RECAP_ITEMS);
-  if (older.length > RECAP_ITEMS) {
-    recap.push(`(${older.length - RECAP_ITEMS} messaggi più vecchi omessi)`);
+  const kept = recapCount > 0 ? older.slice(-recapCount) : [];
+  if (older.length > recapCount) {
+    recap.push(`(${older.length - recapCount} messaggi più vecchi omessi)`);
   }
   for (const m of kept) {
     const who = m.role === "user" ? "Utente" : "Nova";

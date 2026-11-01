@@ -1,5 +1,6 @@
 import type { Block, BlockData, ButtonIcon, LinkButton, Site, Theme, ThemeFont } from "@/lib/site";
 import { legibleAccent, readableOn } from "@/lib/colors";
+import { srcSetFor } from "@/lib/images";
 import { LeadForm } from "@/components/LeadForm";
 import { InfoBlock } from "@/components/InfoBlock";
 
@@ -298,6 +299,8 @@ function BlockView({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={d.avatar}
+              srcSet={srcSetFor(d.avatar)}
+              sizes="80px"
               alt={d.title ?? ""}
               width={80}
               height={80}
@@ -512,7 +515,9 @@ function BlockView({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={p.image}
-                      alt={p.name}
+                      srcSet={srcSetFor(p.image)}
+                      sizes="56px"
+                      alt={p.alt || p.name}
                       width={56}
                       height={56}
                       loading="lazy"
@@ -580,7 +585,9 @@ function BlockView({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={p.image}
-                      alt={p.name}
+                      srcSet={srcSetFor(p.image)}
+                      sizes="(max-width: 480px) 90vw, 320px"
+                      alt={p.alt || p.name}
                       width={400}
                       height={400}
                       loading="lazy"
@@ -714,7 +721,9 @@ function BlockView({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={src}
-                    alt=""
+                    srcSet={srcSetFor(src)}
+                    sizes="76vw"
+                    alt={d.imageAlts?.[i] ?? ""}
                     width={640}
                     height={800}
                     loading={i === 0 ? "eager" : "lazy"}
@@ -746,7 +755,9 @@ function BlockView({
               <img
                 key={i}
                 src={src}
-                alt=""
+                srcSet={srcSetFor(src)}
+                sizes="(max-width: 480px) 45vw, 240px"
+                alt={d.imageAlts?.[i] ?? ""}
                 width={400}
                 height={400}
                 loading="lazy"

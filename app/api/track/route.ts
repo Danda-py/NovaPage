@@ -13,7 +13,20 @@ function visitFingerprint(req: Request): string {
   return createHash("sha256").update(`${salt}|${day}|${clientIp(req)}`).digest("hex").slice(0, 24);
 }
 
+/**
+ * I crawler non sono visite: senza questo filtro i numeri delle statistiche
+ * raccontano i bot di Google e i monitor di uptime, non i clienti.
+ */
+const BOT = /bot|crawl|spider|slurp|headless|preview|lighthouse|monitor|uptime|facebookexternalhit|whatsapp|telegram|slack/i;
+
+function isBot(req: Request): boolean {
+  const ua = req.headers.get("user-agent") ?? "";
+  return !ua || BOT.test(ua);
+}
+
 export async function POST(req: Request) {
+  if (isBot(req)) return NextResponse.json({ ok: true });
+
   const limit = await rateLimit(`track:${clientIp(req)}`, 120, 60 * 1000);
   if (!limit.ok) return NextResponse.json({ ok: true });
 

@@ -85,10 +85,18 @@ export async function POST(req: Request) {
     message?: string;
     website?: string;
     consent?: boolean;
+    /** Timestamp del montaggio del modulo: un invio istantaneo è un bot. */
+    startedAt?: number;
   } | null;
 
   // Honeypot: i bot compilano il campo nascosto, gli umani no.
   if (body?.website) return NextResponse.json({ ok: true }, { status: 201 });
+
+  // Nessun umano compila un modulo in meno di un secondo e mezzo: rispondiamo
+  // "ok" per non dare al bot un segnale, ma il lead non viene salvato.
+  if (typeof body?.startedAt === "number" && Date.now() - body.startedAt < 1500) {
+    return NextResponse.json({ ok: true }, { status: 201 });
+  }
 
   if (!body?.siteId || !(body.name?.trim() || body.email?.trim() || body.phone?.trim())) {
     return NextResponse.json({ error: "Inserisci almeno un recapito" }, { status: 400 });

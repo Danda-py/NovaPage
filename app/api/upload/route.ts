@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 import { logError } from "@/lib/store";
-import { saveImage } from "@/lib/storage";
+import { saveImage, UnsupportedImageError } from "@/lib/storage";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -30,6 +30,14 @@ export async function POST(req: Request) {
     const url = await saveImage(file);
     return NextResponse.json({ url });
   } catch (error) {
+    // Il file diceva di essere un'immagine ma non lo è: è un errore del client, non
+    // dello storage. 415 dice la verità e non sporca i log come guasto del servizio.
+    if (error instanceof UnsupportedImageError) {
+      return NextResponse.json(
+        { error: "Il file non è un'immagine valida: usa JPG, PNG, WebP o GIF." },
+        { status: 415 },
+      );
+    }
     await logError({ source: "upload", message: "Caricamento fallito", detail: String(error), userId: user.id });
     return NextResponse.json(
       { error: "Caricamento non disponibile: storage immagini non configurato." },

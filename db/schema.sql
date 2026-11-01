@@ -12,6 +12,9 @@ create table if not exists users (
   created_at        timestamptz not null default now()
 );
 
+-- Piano dell'account: 'free' (1 landing, badge NovaPage) o 'pro' (illimitate, badge rimovibile).
+alter table users add column if not exists plan text not null default 'free';
+
 create table if not exists sites (
   id         text primary key,
   owner_id   text references users(id) on delete cascade,

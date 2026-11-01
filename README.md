@@ -77,6 +77,12 @@ node --env-file=.env.local scripts/migrate-v4.mjs
 # gestione dei contatti: stato, nota privata, data di risposta
 node --env-file=.env.local scripts/migrate-v5.mjs
 
+# consumo dei token dell'assistente
+node --env-file=.env.local scripts/migrate-v6.mjs
+
+# controllo che un database in uso abbia tutte le colonne richieste
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/verify.sql
+
 # dati del vecchio store JSON (solo prima migrazione)
 node --env-file=.env.local scripts/migrate.mjs
 ```

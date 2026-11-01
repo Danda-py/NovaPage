@@ -9,16 +9,35 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      # Valori finti: build e test non aprono connessioni.
-      DATABASE_URL: postgresql://user:password@localhost:5432/novapage
+      # Postgres di servizio: serve al controllo dello schema, non ai test (unitari).
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/novapage
       AUTH_SECRET: ci-secret-non-reale
       NEXT_PUBLIC_SITE_URL: https://example.com
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: novapage
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Schema del database
+        run: |
+          PGPASSWORD=password psql -h localhost -U postgres -d novapage \
+            -v ON_ERROR_STOP=1 -f db/schema.sql
+          PGPASSWORD=password psql -h localhost -U postgres -d novapage \
+            -v ON_ERROR_STOP=1 -f db/verify.sql
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck

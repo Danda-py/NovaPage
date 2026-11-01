@@ -27,7 +27,8 @@ export function NewSite() {
       router.push(`/editor/${data.site.id}`);
       return;
     }
-    setError("Creazione non riuscita: riprova.");
+    // Il server spiega il limite del piano: mostriamo il suo messaggio.
+    setError(typeof data.error === "string" ? data.error : "Creazione non riuscita: riprova.");
     setCreating(false);
   }
 

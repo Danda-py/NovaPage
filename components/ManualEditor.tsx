@@ -498,6 +498,7 @@ function BlockFields({
   const hours = d.hours ?? [];
   const rows = d.rows ?? [];
   const images = d.images ?? [];
+  const imageAlts = d.imageAlts ?? [];
 
   return (
     <>
@@ -745,23 +746,50 @@ function BlockFields({
       {block.type === "gallery" && (
         <div className="space-y-2">
           <span className={label}>Foto</span>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-1.5">
             {images.map((src, index) => (
-              <div key={`${src}-${index}`} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-zinc-800" />
-                <button
-                  type="button"
-                  onClick={() => onChange({ images: images.filter((_, i) => i !== index) })}
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] text-zinc-300 ring-1 ring-zinc-700"
-                  aria-label="Rimuovi foto"
-                >
-                  ✕
-                </button>
+              <div key={`${src}-${index}`} className="flex items-center gap-2 rounded-lg border border-zinc-800 p-1.5">
+                <div className="relative shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-zinc-800" />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange({
+                        images: images.filter((_, i) => i !== index),
+                        imageAlts: imageAlts.filter((_, i) => i !== index),
+                      })
+                    }
+                    className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] text-zinc-300 ring-1 ring-zinc-700"
+                    aria-label="Rimuovi foto"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <Field
+                  value={imageAlts[index] ?? ""}
+                  onChange={(value) => {
+                    const next = [...imageAlts];
+                    next[index] = value;
+                    onChange({ imageAlts: next });
+                  }}
+                  placeholder="Testo alternativo (opzionale)"
+                />
               </div>
             ))}
           </div>
-          <ImageField url={undefined} onChange={(url) => url && onChange({ images: [...images, url].slice(0, 12) })} onError={onError} />
+          <ImageField
+            url={undefined}
+            onChange={(url) =>
+              url &&
+              onChange({
+                images: [...images, url].slice(0, 12),
+                // Resta allineato agli indici: la nuova foto parte senza alt.
+                imageAlts: [...imageAlts, ""].slice(0, 12),
+              })
+            }
+            onError={onError}
+          />
         </div>
       )}
     </>
@@ -807,6 +835,14 @@ function ProductFields({
         (direttiva Omnibus).
       </p>
       <ImageField url={product.image} onChange={(image) => onChange({ image })} onError={onError} />
+      <div className="space-y-1">
+        <span className={label}>Testo alternativo foto</span>
+        <Field
+          value={product.alt ?? ""}
+          onChange={(alt) => onChange({ alt })}
+          placeholder="es. Felpa nera con cappuccio"
+        />
+      </div>
     </div>
   );
 }

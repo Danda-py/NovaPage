@@ -55,6 +55,8 @@ export type Product = {
   price: string;
   description?: string;
   image?: string;
+  /** Testo alternativo della foto: serve a screen reader e indicizzazione. */
+  alt?: string;
   status?: string;
   /** Prezzo pieno barrato, mostrato accanto a un prezzo scontato. */
   compareAtPrice?: string;
@@ -85,6 +87,8 @@ export type BlockData = {
   items?: Product[];
   hours?: HoursRow[];
   images?: string[];
+  /** Testi alternativi allineati per indice con `images` (le voci mancanti restano vuote). */
+  imageAlts?: string[];
   rows?: InfoRow[];
 };
 
@@ -326,6 +330,7 @@ function normalizeData(raw: unknown): BlockData {
         price: str(p.price) ?? "",
         description: str(p.description),
         image: safeUrl(str(p.image)),
+        alt: str(p.alt),
         status: str(p.status) ?? "Disponibile",
         compareAtPrice: str(p.compareAtPrice),
         lowestPrice30: str(p.lowestPrice30),
@@ -339,6 +344,11 @@ function normalizeData(raw: unknown): BlockData {
   }
   const images = strList(d.images)?.map(safeUrl).filter(Boolean);
   if (images) out.images = images;
+  // Senza immagini gli alt non hanno a cosa riferirsi.
+  if (out.images?.length) {
+    const alts = strList(d.imageAlts)?.map((a) => a.slice(0, 120));
+    if (alts?.length) out.imageAlts = alts;
+  }
   if (Array.isArray(d.rows)) {
     out.rows = d.rows
       .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
@@ -489,6 +499,24 @@ export function applyToolCalls(site: Site, calls: ToolCall[]): Site {
         if (typeof a.font === "string" && THEME_FONTS.includes(a.font as ThemeFont)) {
           next.theme.font = a.font as ThemeFont;
         }
+        break;
+      }
+      case "set_block": {
+        const data = normalizeData(a.data);
+        const blockId = typeof a.block_id === "string" ? a.block_id : "";
+        if (blockId) {
+          const block = next.blocks.find((b) => b.id === blockId);
+          if (block) block.data = { ...block.data, ...data };
+          break;
+        }
+        const type = a.type as BlockType;
+        if (!BLOCK_TYPES.includes(type)) break;
+        const pos = typeof a.position === "number" ? a.position : next.blocks.length;
+        next.blocks.splice(Math.max(0, Math.min(pos, next.blocks.length)), 0, {
+          id: newId("blk"),
+          type,
+          data: { ...DEFAULT_DATA[type], ...data },
+        });
         break;
       }
       case "add_block": {

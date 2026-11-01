@@ -10,6 +10,7 @@ import { NewSite } from "@/components/NewSite";
 import { LogoutButton } from "@/components/LogoutButton";
 import { Brand } from "@/components/Brand";
 import { siteReadiness } from "@/lib/readiness";
+import { PLANS, planSpec, siteLimitReached } from "@/lib/plans";
 
 export default async function Dashboard() {
   await connection();
@@ -17,6 +18,8 @@ export default async function Dashboard() {
   if (!user) redirect("/login");
 
   const sites = await listSites(user.id);
+  const plan = planSpec(user.plan);
+  const atLimit = siteLimitReached(user.plan, sites.length);
   const leads = await listLeadsForOwner(user.id);
 
   const leadsBySite = new Map<string, number>();
@@ -75,7 +78,18 @@ export default async function Dashboard() {
               {unreadTotal} nuovi da leggere
             </span>
           )}
+          <span className="rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
+            Piano {plan.label}
+            {Number.isFinite(plan.sites) ? ` · ${sites.length}/${plan.sites} landing` : " · landing illimitate"}
+          </span>
         </p>
+
+        {atLimit && (
+          <p className="mt-3 rounded-xl border border-violet-500/30 bg-violet-500/[0.07] px-3 py-2 text-[11.5px] leading-relaxed text-violet-200">
+            Il piano {plan.label} include {plan.sites} landing. Per crearne un&apos;altra serve il
+            piano {PLANS.pro.label}: scrivici per attivarlo.
+          </p>
+        )}
 
         {needsWork.length > 0 && (
           <section className="mt-6 rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-4">

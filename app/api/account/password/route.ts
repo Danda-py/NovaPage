@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import {
   createSessionToken,
   getCurrentUser,
@@ -7,6 +7,7 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { updateUserPassword } from "@/lib/store";
+import { emailConfigured, securityEmailHtml, sendEmail } from "@/lib/email";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
@@ -40,6 +41,21 @@ export async function POST(req: Request) {
 
   const { salt, hash } = await hashPassword(next);
   await updateUserPassword(user.id, hash, salt);
+
+  // Avviso all'indirizzo attuale: se il cambio non è suo, deve accorgersene.
+  if (emailConfigured()) {
+    after(async () => {
+      await sendEmail({
+        to: user.email,
+        subject: "Password aggiornata su NovaPage",
+        html: securityEmailHtml({
+          title: "Password aggiornata",
+          body: `La password del tuo account ${user.email} è stata cambiata poco fa. Tutte le altre sessioni sono state disconnesse.`,
+        }),
+        text: `La password del tuo account ${user.email} è stata cambiata poco fa. Se non sei stato tu, reimposta la password dalla pagina di accesso.`,
+      });
+    });
+  }
 
   // updateUserPassword incrementa session_version: senza rinnovo questa sessione
   // (e tutte le altre) verrebbe disconnessa immediatamente.

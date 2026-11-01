@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { applyToolCalls, normalizeAsk, withLegalAck } from "@/lib/site";
 import type { Ask, Site, ToolCall } from "@/lib/site";
 import {
@@ -15,6 +16,8 @@ import { claimsChange, NO_CHANGE_REPLY } from "@/lib/chat-guards";
 import { colorDirective } from "@/lib/colors";
 import { htmlOutline, validateHtml } from "@/lib/html";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
+import { riskyMarkup } from "@/lib/moderation";
+import { planSpec } from "@/lib/plans";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import {
@@ -25,6 +28,7 @@ import {
   type AiIntent,
   type AiTarget,
 } from "@/lib/ai";
+import { SYSTEM_PROMPT } from "@/lib/ai-prompt";
 
 // Direzioni creative: ne viene scelta una a caso per ogni nuova pagina, così due siti non si somigliano.
 const DESIGN_DIRECTIONS = [
@@ -168,31 +172,25 @@ const FUNCTION_DECLARATIONS = [
     },
   },
   {
-    name: "add_block",
-    description: "Aggiunge una sezione alla pagina, nell'ordine indicato.",
+    name: "set_block",
+    description:
+      "Crea una sezione (senza block_id) oppure aggiorna quella indicata (con block_id): i campi inviati sostituiscono i valori attuali.",
     parameters: {
       type: "OBJECT",
       properties: {
+        block_id: {
+          type: "STRING",
+          description: "Id della sezione da aggiornare; ometti quando crei una sezione nuova",
+        },
         type: {
           type: "STRING",
           enum: ["hero", "banner", "links", "catalog", "hours", "gallery", "info", "form", "contact"],
+          description: "Tipo della sezione, solo in creazione",
         },
-        position: { type: "INTEGER", description: "Indice di inserimento, 0 = in cima" },
+        position: { type: "INTEGER", description: "Indice di inserimento in creazione, 0 = in cima" },
         data: BLOCK_DATA_SCHEMA,
       },
-      required: ["type", "data"],
-    },
-  },
-  {
-    name: "update_block",
-    description: "Modifica un blocco esistente: i campi inviati sostituiscono quelli attuali.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        block_id: { type: "STRING" },
-        data: BLOCK_DATA_SCHEMA,
-      },
-      required: ["block_id", "data"],
+      required: ["data"],
     },
   },
   {
@@ -301,89 +299,21 @@ const FUNCTION_DECLARATIONS = [
   },
 ];
 
-const SYSTEM_PROMPT = `Sei Nova, l'assistente che progetta e costruisce landing page per piccole attività.
-Hai due modi di lavorare: write_html (HTML e CSS liberi, nessuno schema imposto) e i blocchi strutturati. Obiettivo: una pagina completa, ordinata e pronta da pubblicare.
+/**
+ * Non tutte le funzioni servono in ogni momento: mandare solo quelle pertinenti
+ * al tipo di pagina riduce lo schema dei tool a ogni round (e quindi i token).
+ */
+const TOOL_SETS: Record<"html" | "blocks", string[]> = {
+  html: ["write_html", "patch_html", "set_meta", "update_theme", "ask_user"],
+  blocks: ["update_theme", "set_block", "delete_block", "reorder_blocks", "set_meta", "ask_user"],
+};
 
-HTML LIBERO: LA MODALITÀ PREDEFINITA
-- Per una pagina nuova, un restyling o qualsiasi richiesta che riguardi il design ("una landing moderna", "stile studio legale", "più elegante", "come questa foto"), scrivi la pagina con write_html. Nessun template: decidi tu struttura, gerarchia, tipografia, spaziature e dettagli.
-- Ogni pagina deve essere visivamente diversa dalle altre: due richieste simili non devono produrre lo stesso layout. Cambia griglia, allineamenti, ritmo verticale, uso del colore, forme e dettagli (bordi, ombre, texture, numerazione delle sezioni).
-- Consegna un frammento di body: un <style> iniziale con le variabili in :root, poi il markup. Niente <html>, <head>, <body>; niente <script>, <iframe>, <object>: vengono rimossi.
-- CSS ammesso: flex/grid, clamp() per la tipografia, gradienti, ombre, transizioni e animazioni CSS, filtri, backdrop-filter, pseudo-elementi, ::selection, scroll-snap, media query. Mobile first, max-width intorno a 1100px, target touch da 44px.
-- Font: famiglie di sistema oppure un <link> a Google Fonts. Immagini: solo URL reali forniti dall'utente; altrimenti forme, gradienti e icone SVG disegnate a mano. Niente immagini da URL inventati.
-- L'HTML deve avere senso anche senza CSS: titoli in ordine (h1, poi h2), link veri, testi alt sulle immagini decorative assenti.
-- Chiudi con un footer: dati del titolare se l'utente li ha forniti (ragione sociale, P.IVA, indirizzo) e link a privacy e cookie se esistono.
-- Insieme a write_html imposta anche update_theme con gli stessi colori del CSS (sfondo, testo, accento): l'immagine di anteprima social e il theme-color si leggono da lì.
-- Puoi includere uno <script type="application/ld+json"> con i dati strutturati (LocalBusiness, Product, FAQPage): resta nella pagina e Google lo legge. Ogni altro script viene rimosso.
-- Per raccogliere contatti scrivi un modulo HTML vero: <form action="/api/leads/form" method="post" data-novapage-lead> con input name, email, phone, message, una casella <input type="checkbox" name="consent" required> e un <button type="submit">. Non mettere campi nascosti: lo slug lo aggiunge la piattaforma.
-- Il primo write_html sostituisce tutto: dopo averlo chiamato rispondi con una o due frasi, non ripetere la pagina.
-- Per modificare un dettaglio di una pagina già in HTML usa patch_html con 1-4 sostituzioni esatte (un testo, un colore, un prezzo): costa meno e non tocca il resto. Riscrivi tutto con write_html solo per un rifacimento vero.
-- Nel footer lascia <span data-novapage-legal></span> al posto dei link legali: la piattaforma lo riempie con privacy, cookie e termini della pagina.
-- I blocchi restano per le pagine già costruite a blocchi e per le modifiche mirate ("cambia il titolo", "aggiungi gli orari").
+function toolsFor(mode: "html" | "blocks") {
+  const allowed = new Set(TOOL_SETS[mode]);
+  return FUNCTION_DECLARATIONS.filter((tool) => allowed.has(tool.name));
+}
 
-PAGINE A BLOCCHI (per i siti già costruiti così)
-- Se l'utente descrive un'attività (bar, negozio, parrucchiere, palestra, freelance, reseller) e la pagina è quasi vuota, costruisci più sezioni in una sola risposta, in questo ordine tipico:
-  hero (titolo, sottotitolo, badge) → banner (solo se c'è una promo) → links (i pulsanti richiesti) → catalog (prodotti, servizi o menu) → hours (orari) → gallery (solo con foto reali) → contact.
-- Ogni sezione deve avere contenuti reali. Se un blocco resterebbe vuoto, non aggiungerlo.
-- Non duplicare sezioni dello stesso tipo già presenti: aggiorna quelle esistenti con update_block.
 
-QUALITÀ DEI TESTI
-- Titolo: massimo 6 parole. Sottotitolo: massimo 140 caratteri, concreto e senza slogan vuoti.
-- Pulsanti: verbi chiari ("Prenota un tavolo", "Vedi il menù", "Scrivici su WhatsApp").
-- Per ogni pulsante scegli l'icona adatta: whatsapp, instagram, tiktok, pin per le mappe, pdf per il menù, phone, email, globe, calendar per prenotazioni, shop. Metti variant "primary" sull'azione di contatto o prenotazione (tipicamente WhatsApp) e "ghost" sulle altre.
-- Se c'è un banner promozionale, mettilo come prima sezione della pagina, sopra il titolo.
-- Nessun testo segnaposto tipo "Lorem ipsum", "titolo qui", "testo".
-
-INFORMAZIONI NON-LINK (blocco info)
-- Password Wi-Fi, codici di accesso, orari di check-in/check-out, regole della casa, numeri utili sono dati testuali: vanno nel blocco "info" come righe {label, value}.
-- Non mettere mai testi, password o codici nel campo url di un pulsante. Usa solo URL https reali; mai schemi come javascript: o data:.
-- Se un pulsante esistente contiene un dato che non è un link (es. "Password Wi-Fi: Aurora2026"), sposta quel dato in un blocco info e lascia al pulsante solo un'azione reale.
-
-ADATTA LA PAGINA AL SETTORE
-- Prima di modificare, identifica il tipo di attività e scegli solo le sezioni che servono davvero.
-- Casa vacanze / B&B: hero di benvenuto, info (Wi-Fi, check-in, check-out, regole), gallery, links (mappa, ristoranti, guida), form per feedback e richieste di checkout. Niente vetrina prodotti né orari di negozio.
-- Bar / ristorante: banner promozioni, catalog come menù, hours, links (menù PDF, mappa, WhatsApp).
-- Negozio / reseller: catalog con prezzi, banner per i drop, links social, hours, contact.
-- Creator / professionista: links social, gallery, catalog come servizi, form per preventivi.
-
-MODULO CONTATTI
-- Il blocco "form" mostra un modulo che salva nome, email, telefono e messaggio nella sezione contatti dell'utente.
-- Usa "form" quando l'utente vuole raccogliere richieste, preventivi o prenotazioni; usa "contact" solo per mostrare i suoi recapiti.
-
-CAPACITÀ DI LAYOUT
-- Il catalogo e la galleria accettano il campo layout: "grid" (griglia), "list" (righe), "carousel" (scorrimento orizzontale).
-- Se l'utente chiede un carosello, una galleria scorrevole o uno slider, imposta layout "carousel" sul blocco interessato.
-
-ONESTÀ
-- Ogni modifica che annunci deve corrispondere a una chiamata di funzione. Non dire "ho fatto" qualcosa che non hai fatto.
-- Con write_html puoi realizzare qualsiasi layout: restano fuori solo le funzioni lato server (pagamenti reali, login, aree riservate, invio email automatico). Se servono, dillo in una frase e proponi l'alternativa più vicina.
-
-DATI REALI
-- Non inventare URL, numeri di telefono, WhatsApp, indirizzi o foto.
-- Se aggiungi prodotti, voci di menù, prezzi o orari non forniti dall'utente, trattali come esempi e scrivilo nella risposta ("i prodotti sono esempi da modificare").
-- Se un dato manca, ometti quel campo o lascia url vuoto ("") e chiedilo con lo strumento ask_user, non nel testo.
-
-CAMPI DI RISPOSTA (ask_user)
-- Quando servono telefono, WhatsApp, email, Instagram o altri social, indirizzo, orari, logo o foto, chiama ask_user con i campi necessari: l'utente li compila e non deve scriverli a mano.
-- Massimo 4 campi per chiamata. Usa type "image" per logo e foto, "tel" per i numeri, "url" per i profili social, "textarea" per testi lunghi.
-- Chiama ask_user solo per dati reali che ti servono davvero e che non hai già ricevuto prima.
-- Le risposte arrivano come messaggio utente in forma "- Etichetta: valore": applicale subito alla pagina aggiornando i blocchi interessati.
-- Formati: WhatsApp https://wa.me/393331234567 ; mappa https://www.google.com/maps/search/?api=1&query=INDIRIZZO ; sito o PDF https:// indirizzo completo.
-- Non inserire immagini se non hai un URL reale fornito dall'utente.
-
-UNICITÀ E PERSONALITÀ
-- Ogni pagina deve sembrare fatta su misura: titolo con il nome reale dell'attività, sottotitolo specifico su cosa offre e a chi.
-- Adatta la composizione al settore: bar/ristorante → promozione o menù in evidenza + orari; reseller → banner per il drop + vetrina; creator → link social + galleria; servizi → listino + orari + contatti; negozio → articoli + mappa.
-- Cambia l'ordine delle sezioni da una pagina all'altra: non usare sempre lo stesso schema.
-- Vengono vietate le frasi generiche: "Scopri i nostri servizi", "Contattaci per maggiori informazioni", "Benvenuti nel nostro sito", "La tua attività".
-- Sostituisci sempre i segnaposto ("Nome attività", "Una frase che spiega cosa fai") con contenuti reali.
-
-STILE
-- Cambia i colori solo se richiesto; mantieni contrasto alto tra sfondo e testo.
-- Se l'utente nomina un colore, usa il valore esatto: nero #000000, bianco #ffffff, rosso #ef4444, blu #3b82f6, verde #22c55e, viola #8b5cf6, oro #d4af37, grigio #71717a.
-- Se la richiesta non cambia nulla (colore già uguale, elemento già presente, testo identico), non chiamare funzioni e rispondi in una frase dicendo che non serve alcuna modifica.
-- Se l'utente chiede un colore per un singolo pulsante, imposta il campo color di quel pulsante invece di cambiare il tema.
-- Rispondi con una o due frasi: cosa hai cambiato e, se serve, la domanda secca sui dati mancanti.
-- Se la richiesta non riguarda il sito, non chiamare funzioni e spiega in una frase cosa puoi fare.`;
 
 export async function POST(req: Request) {
   if (!aiConfigured()) {
@@ -440,8 +370,15 @@ export async function POST(req: Request) {
     await setChatAnswers(siteId, body.answerFor, body.answers);
   }
 
+  const wantsNewLook =
+    record.config.blocks.length <= 1 ||
+    /nuov[oa] pagina|rifai|ridisegna|nuovo stile|riparti|da zero|restyling/i.test(message);
+
   const conversation = await getChat(siteId);
-  const conversationContext = buildConversationContext(conversation);
+  const conversationContext = buildConversationContext(
+    conversation,
+    wantsNewLook ? undefined : { recent: 4, recap: 8 },
+  );
 
   type Part = {
     text?: string;
@@ -450,9 +387,6 @@ export async function POST(req: Request) {
   };
   type Turn = { role: "user" | "model"; parts: Part[] };
 
-  const wantsNewLook =
-    record.config.blocks.length <= 1 ||
-    /nuov[oa] pagina|rifai|ridisegna|nuovo stile|riparti|da zero|restyling/i.test(message);
   const direction = wantsNewLook
     ? DESIGN_DIRECTIONS[Math.floor(Math.random() * DESIGN_DIRECTIONS.length)]
     : null;
@@ -526,13 +460,14 @@ export async function POST(req: Request) {
     });
   }
 
+  const tools = toolsFor(record.config.html || wantsNewLook ? "html" : "blocks");
   const contents: Turn[] = [{ role: "user", parts: [{ text: requestText }] }];
 
   async function callGemini(turns: Turn[]) {
     const payload = {
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: turns,
-      tools: [{ functionDeclarations: FUNCTION_DECLARATIONS }],
+      tools: [{ functionDeclarations: tools }],
       generationConfig: generationConfig(intent),
     };
 
@@ -581,6 +516,7 @@ export async function POST(req: Request) {
       if (calls.length) {
         const fallback = texts.join(" ").trim() || "Ho aggiornato la pagina.";
         await updateSite(siteId, { config: site });
+        revalidateTag(`site:${record.slug}`, { expire: 0 });
         await flushUsage();
         const messages = await appendChat(siteId, [
           { role: "user", text: message || "Ho caricato delle foto.", images },
@@ -648,6 +584,10 @@ export async function POST(req: Request) {
       if (ask) break;
     }
 
+    // Correzione mirata già completata: un altro giro rimanderebbe al modello
+    // istruzioni, tool e stato del sito per migliaia di token, senza aggiungere nulla.
+    if (text && !wantsNewLook && (site.html || site.blocks.length > 1)) break;
+
     contents.push({
       role: "user",
       parts: [
@@ -702,6 +642,19 @@ export async function POST(req: Request) {
 
   if (site.html) site = { ...site, html: sanitizeHtmlStrict(site.html) };
 
+  // Credenziali o carte in una pagina generata: si tiene la versione precedente.
+  if (site.html && riskyMarkup(site.html)) {
+    site = { ...site, html: record.config.html };
+    texts.push(
+      "La pagina conteneva un modulo che raccoglie password o dati di pagamento e non l'ho applicata: userei un link al tuo sistema di pagamento.",
+    );
+  }
+
+  // Il badge si toglie solo con il piano che lo prevede, anche se lo chiede l'IA.
+  if (site.hideBadge && !planSpec(user.plan).hideBadge) {
+    site = { ...site, hideBadge: undefined };
+  }
+
   site = withLegalAck(record.config, site, {
     ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
     userAgent: req.headers.get("user-agent") ?? undefined,
@@ -714,7 +667,10 @@ export async function POST(req: Request) {
   // Se nulla è cambiato non lasciamo che la risposta dica «fatto».
   if (!changed && !ask && claimsChange(finalReply)) finalReply = NO_CHANGE_REPLY;
 
-  if (changed) await updateSite(siteId, { config: site });
+  if (changed) {
+    await updateSite(siteId, { config: site });
+    revalidateTag(`site:${record.slug}`, { expire: 0 });
+  }
   await flushUsage();
   const messages = await appendChat(siteId, [
     { role: "user", text: message || "Ho caricato delle foto.", images },

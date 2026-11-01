@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getCurrentUser, verifyPassword } from "@/lib/auth";
+import { emailConfigured, securityEmailHtml, sendEmail } from "@/lib/email";
 import { logError, updateUserEmail } from "@/lib/store";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 
@@ -41,6 +42,22 @@ export async function POST(req: Request) {
       userId: user.id,
     });
     return NextResponse.json({ error: "Aggiornamento non riuscito, riprova" }, { status: 500 });
+  }
+
+  // L'avviso va al vecchio indirizzo: è quello che l'utente controlla e che un
+  // malintenzionato non possiede più dopo il cambio.
+  if (emailConfigured()) {
+    after(async () => {
+      await sendEmail({
+        to: user.email,
+        subject: "Email dell'account cambiata su NovaPage",
+        html: securityEmailHtml({
+          title: "Email dell'account aggiornata",
+          body: `L'indirizzo del tuo account NovaPage è passato da ${user.email} a ${email}. Da ora accedi con il nuovo indirizzo.`,
+        }),
+        text: `L'indirizzo del tuo account NovaPage è passato da ${user.email} a ${email}. Se non sei stato tu, reimposta la password dalla pagina di accesso.`,
+      });
+    });
   }
 
   return NextResponse.json({ ok: true, email });

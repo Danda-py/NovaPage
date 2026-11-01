@@ -9,6 +9,8 @@
  * Google li legge.
  */
 
+import { srcSetFor } from "./images";
+
 export const MAX_HTML = 120_000;
 
 /** Dati schema.org: conservati. */
@@ -155,6 +157,16 @@ export function optimizeImages(html: string): string {
       out = out.replace(/\s*\/?>$/, (end) => ` decoding="async"${end}`);
     }
     out = out.replace(/\s*fetchpriority\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+
+    // Stessa scala di varianti delle landing a blocchi: una foto caricata da
+    // NovaPage non deve arrivare intera a un telefono.
+    if (!/\ssrcset\s*=/i.test(out)) {
+      const src = out.match(/\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+      const set = src ? srcSetFor(src[1] ?? src[2] ?? "") : undefined;
+      if (set) {
+        out = out.replace(/\s*\/?>$/, (end) => ` srcset="${set}" sizes="(max-width: 720px) 100vw, 720px"${end}`);
+      }
+    }
 
     return out.replace(/\s*\/?>$/, (end) =>
       first ? ` loading="eager" fetchpriority="high"${end}` : ` loading="lazy"${end}`,

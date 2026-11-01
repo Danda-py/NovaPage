@@ -1,10 +1,9 @@
 export const instant = false;
-import { cache } from "react";
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
-import { getSiteBySlug } from "@/lib/store";
+import { loadPublishedSite } from "@/lib/public-site";
 import { siteUrl } from "@/lib/site-url";
 import { jsonLdScript, pageDescription, siteJsonLd } from "@/lib/seo";
 import { SitePreview } from "@/components/SitePreview";
@@ -25,10 +24,10 @@ import {
 import { decodeLeadCookie, LEAD_COOKIE } from "@/lib/lead-form";
 
 /**
- * Metadata, viewport e pagina chiedono lo stesso sito: senza questa cache la
- * singola richiesta farebbe tre query identiche al database.
+ * Metadata, viewport e pagina chiedono lo stesso sito: il loader è cacheato per
+ * slug (invalidato al salvataggio), quindi la richiesta non ripete la query.
  */
-const loadSite = cache(async (slug: string) => getSiteBySlug(slug));
+const loadSite = loadPublishedSite;
 
 export async function generateMetadata({
   params,
@@ -37,9 +36,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const site = await loadSite(slug);
-  // Con lo streaming la risposta parte prima che la pagina sappia che lo slug
-  // non esiste: lo stato resta 200, quindi almeno il noindex evita la soft 404 in Google.
-  if (!site) return { title: "Pagina non trovata · NovaPage", robots: { index: false, follow: false } };
+  // Qui la risposta non è ancora partita: dichiarare il 404 nei metadati è
+  // l'ultimo punto in cui lo stato HTTP è ancora decidibile.
+  if (!site) notFound();
   if (!site.published) {
     return { title: "Pagina non disponibile · NovaPage", robots: { index: false, follow: false } };
   }

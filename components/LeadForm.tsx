@@ -35,6 +35,8 @@ export function LeadForm({
   const [error, setError] = useState("");
   const [honeypot, setHoneypot] = useState("");
   const [consent, setConsent] = useState(false);
+  // Il server scarta gli invii arrivati troppo presto: un bot compila e spedisce.
+  const [startedAt] = useState(() => Date.now());
   const preview = !siteId;
 
   const field = {
@@ -64,7 +66,7 @@ export function LeadForm({
     const res = await fetch("/api/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteId, ...values, website: honeypot, consent }),
+      body: JSON.stringify({ siteId, ...values, website: honeypot, consent, startedAt }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
