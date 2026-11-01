@@ -28,8 +28,14 @@ Variabili lette dal codice (solo lato server, nessun `NEXT_PUBLIC_` tranne l'URL
 | --- | --- | --- |
 | `DATABASE_URL` | connection string **pooled** di Neon | sì |
 | `AUTH_SECRET` | firma dei cookie di sessione | sì in produzione |
-| `GEMINI_API_KEY` | generazione e modifica delle pagine | sì |
+| `GEMINI_API_KEY` | generazione e modifica delle pagine (Google AI Studio) | sì, se non usi Vertex |
 | `GEMINI_MODEL` | default `gemini-3.5-flash-lite` | no |
+| `AI_PROVIDER` | `gemini` o `vertex`; dedotto dalle credenziali | no |
+| `GOOGLE_VERTEX_API_KEY` | Vertex AI in express mode (stesso formato Gemini) | alternativa a `GEMINI_API_KEY` |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | service account Vertex (JSON o base64) | alternativa all'API key |
+| `GOOGLE_VERTEX_PROJECT` / `GOOGLE_VERTEX_LOCATION` | progetto e regione Vertex (default `global`) | con service account |
+| `AI_MODEL` / `AI_MODEL_PAGE` | modello per correzioni e per pagine nuove | no |
+| `AI_MAX_OUTPUT_TOKENS` / `AI_THINKING_BUDGET` | limiti di output e ragionamento | no |
 | `BLOB_READ_WRITE_TOKEN` | storage immagini su Vercel Blob | sì in produzione |
 | `RESEND_API_KEY` + `EMAIL_FROM` | reset password via email | per il recupero password |
 | `NEXT_PUBLIC_SITE_URL` | URL pubblico per sitemap, OpenGraph e link nelle email | sì in produzione |
@@ -40,6 +46,18 @@ Variabili lette dal codice (solo lato server, nessun `NEXT_PUBLIC_` tranne l'URL
 In produzione `AUTH_SECRET` mancante è un errore esplicito, non un fallback silenzioso: su Vercel il
 filesystem è read-only e il login fallirebbe. Anche il link di reset password usa solo
 `NEXT_PUBLIC_SITE_URL` (mai l'header `Origin` della richiesta).
+
+## Costi dell'assistente
+
+- Le pagine nuove usano `AI_MODEL_PAGE`, le correzioni `AI_MODEL` (default `gemini-3.5-flash-lite`).
+- `AI_THINKING_BUDGET=0` (default) spegne il ragionamento, che viene fatturato come output.
+- `AI_MAX_OUTPUT_TOKENS` limita l'output: 4096 per le correzioni, 32000 per una pagina nuova.
+- `AI_MAX_ROUNDS` (default 4) limita i giri di tool calling: ogni giro rimanda istruzioni e stato.
+- Su una pagina in HTML libero si inviano solo estratto e struttura: i blocchi completi non vengono
+  più serializzati a ogni turno.
+- La tabella `ai_usage` registra i token di ogni richiesta; il totale del mese è in `/account`.
+- Vertex AI parla lo stesso protocollo di Gemini: basta `GOOGLE_VERTEX_API_KEY` (express mode) oppure
+  un service account, senza toccare il codice.
 
 ## Database
 
@@ -52,6 +70,12 @@ node --env-file=.env.local scripts/migrate-v2.mjs
 
 # stato di pubblicazione delle pagine (bozza/pubblicata)
 node --env-file=.env.local scripts/migrate-v3.mjs
+
+# cronologia delle versioni delle pagine
+node --env-file=.env.local scripts/migrate-v4.mjs
+
+# gestione dei contatti: stato, nota privata, data di risposta
+node --env-file=.env.local scripts/migrate-v5.mjs
 
 # dati del vecchio store JSON (solo prima migrazione)
 node --env-file=.env.local scripts/migrate.mjs
@@ -133,6 +157,7 @@ Va lanciato a mano o in una job notturna, non a ogni commit. La CI
   Su serverless non sono persistenti.
 - **Errori**: gli errori non gestiti finiscono in `error_logs` tramite `instrumentation.ts`, con
   confini di errore dedicati (`app/error.tsx`, `app/global-error.tsx`).
+- **HTML libero**: una landing può essere a blocchi oppure in HTML/CSS libero (`Site.html`), scritto dall'IA con `write_html` o incollato nella scheda HTML dell'editor. È reso inline nella pagina pubblica, non in un iframe, quindi resta indicizzabile. Gli script vengono rimossi (girerebbero con i cookie dell'app); restano i dati strutturati JSON-LD validi e tutti gli stili. Limite 120.000 caratteri. Nella scheda HTML c'è la lista dei controlli legali (titolare e P.IVA, privacy, cookie, prezzi, diritti su immagini, accessibilità): l'utente è responsabile di ciò che pubblica.
 - **SEO delle landing**: titolo e descrizione editabili (usati in `<title>`, OG e Twitter),
   canonical `/s/{slug}`, `robots` con `max-image-preview: large`, immagine OpenGraph 1200×630 generata
   dal tema della pagina, `theme-color` dallo sfondo, sitemap con `lastModified` e dati strutturati

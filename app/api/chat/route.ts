@@ -1,14 +1,30 @@
 import { NextResponse } from "next/server";
-import { applyToolCalls, normalizeAsk } from "@/lib/site";
+import { applyToolCalls, normalizeAsk, withLegalAck } from "@/lib/site";
 import type { Ask, Site, ToolCall } from "@/lib/site";
-import { appendChat, getChat, getSite, logError, setChatAnswers, updateSite } from "@/lib/store";
+import {
+  appendChat,
+  getChat,
+  getSite,
+  logError,
+  recordAiUsage,
+  setChatAnswers,
+  updateSite,
+} from "@/lib/store";
 import { buildConversationContext } from "@/lib/context";
 import { claimsChange, NO_CHANGE_REPLY } from "@/lib/chat-guards";
 import { colorDirective } from "@/lib/colors";
+import { htmlOutline, validateHtml } from "@/lib/html";
+import { sanitizeHtmlStrict } from "@/lib/html-strict";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
-
-const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+import {
+  aiConfigured,
+  aiTarget,
+  generationConfig,
+  readUsage,
+  type AiIntent,
+  type AiTarget,
+} from "@/lib/ai";
 
 // Direzioni creative: ne viene scelta una a caso per ogni nuova pagina, così due siti non si somigliano.
 const DESIGN_DIRECTIONS = [
@@ -250,6 +266,29 @@ const FUNCTION_DECLARATIONS = [
     },
   },
   {
+    name: "patch_html",
+    description:
+      "Modifica mirata di una pagina già in HTML: sostituisce frammenti esatti invece di riscrivere tutto. Usalo per testi, colori, prezzi, singole sezioni. `find` deve essere esatto e unico quanto basta.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        patches: {
+          type: "ARRAY",
+          description: "Massimo 12 sostituzioni, ognuna su un frammento diverso.",
+          items: {
+            type: "OBJECT",
+            properties: {
+              find: { type: "STRING", description: "Testo esatto da cercare, markup compreso" },
+              replace: { type: "STRING", description: "Testo che lo sostituisce" },
+            },
+            required: ["find", "replace"],
+          },
+        },
+      },
+      required: ["patches"],
+    },
+  },
+  {
     name: "set_meta",
     description: "Imposta titolo e descrizione della pagina (SEO e scheda link).",
     parameters: {
@@ -273,8 +312,12 @@ HTML LIBERO: LA MODALITÀ PREDEFINITA
 - Font: famiglie di sistema oppure un <link> a Google Fonts. Immagini: solo URL reali forniti dall'utente; altrimenti forme, gradienti e icone SVG disegnate a mano. Niente immagini da URL inventati.
 - L'HTML deve avere senso anche senza CSS: titoli in ordine (h1, poi h2), link veri, testi alt sulle immagini decorative assenti.
 - Chiudi con un footer: dati del titolare se l'utente li ha forniti (ragione sociale, P.IVA, indirizzo) e link a privacy e cookie se esistono.
+- Insieme a write_html imposta anche update_theme con gli stessi colori del CSS (sfondo, testo, accento): l'immagine di anteprima social e il theme-color si leggono da lì.
+- Puoi includere uno <script type="application/ld+json"> con i dati strutturati (LocalBusiness, Product, FAQPage): resta nella pagina e Google lo legge. Ogni altro script viene rimosso.
+- Per raccogliere contatti scrivi un modulo HTML vero: <form action="/api/leads/form" method="post" data-novapage-lead> con input name, email, phone, message, una casella <input type="checkbox" name="consent" required> e un <button type="submit">. Non mettere campi nascosti: lo slug lo aggiunge la piattaforma.
 - Il primo write_html sostituisce tutto: dopo averlo chiamato rispondi con una o due frasi, non ripetere la pagina.
-- Per modificare un dettaglio di una pagina già in HTML riscrivi il documento completo con write_html (non frammenti parziali).
+- Per modificare un dettaglio di una pagina già in HTML usa patch_html con 1-4 sostituzioni esatte (un testo, un colore, un prezzo): costa meno e non tocca il resto. Riscrivi tutto con write_html solo per un rifacimento vero.
+- Nel footer lascia <span data-novapage-legal></span> al posto dei link legali: la piattaforma lo riempie con privacy, cookie e termini della pagina.
 - I blocchi restano per le pagine già costruite a blocchi e per le modifiche mirate ("cambia il titolo", "aggiungi gli orari").
 
 PAGINE A BLOCCHI (per i siti già costruiti così)
@@ -343,11 +386,15 @@ STILE
 - Se la richiesta non riguarda il sito, non chiamare funzioni e spiega in una frase cosa puoi fare.`;
 
 export async function POST(req: Request) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "GEMINI_API_KEY non configurata" }, { status: 500 });
+  if (!aiConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Assistente AI non configurato: imposta GEMINI_API_KEY, oppure GOOGLE_VERTEX_API_KEY / GOOGLE_SERVICE_ACCOUNT_JSON per Vertex AI.",
+      },
+      { status: 500 },
+    );
   }
-  const key = apiKey;
 
   const body = (await req.json().catch(() => null)) as {
     siteId?: string;
@@ -375,7 +422,8 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Autenticazione richiesta" }, { status: 401 });
 
-  const limit = await rateLimit(`chat:${user.id}`, 40, 60 * 60 * 1000);
+  const userId = user.id;
+  const limit = await rateLimit(`chat:${userId}`, 40, 60 * 60 * 1000);
   if (!limit.ok) {
     return NextResponse.json(
       { error: `Troppi messaggi in poco tempo. Riprova tra ${limit.retryAfter} secondi.` },
@@ -409,13 +457,16 @@ export async function POST(req: Request) {
     ? DESIGN_DIRECTIONS[Math.floor(Math.random() * DESIGN_DIRECTIONS.length)]
     : null;
 
-  // L'HTML può essere molto lungo: al modello basta l'inizio, non l'intero documento.
+  // L'HTML può essere molto lungo: al modello serve la struttura, non tutto il CSS.
+  // Di una pagina in HTML libero non si mandano i blocchi completi: sono inutilizzati
+  // e occupano token a ogni turno.
   const htmlState = record.config.html
     ? {
-        ...record.config,
-        html: `${record.config.html.slice(0, 4000)}${
-          record.config.html.length > 4000 ? "\n…(troncato)" : ""
-        }`,
+        meta: record.config.meta,
+        theme: record.config.theme,
+        legal: record.config.legal,
+        blockTypes: record.config.blocks.map((block) => block.type),
+        html: `${record.config.html.slice(0, 1200)}\n…(troncato)\n${htmlOutline(record.config.html)}`,
       }
     : record.config;
 
@@ -437,18 +488,80 @@ export async function POST(req: Request) {
     .filter(Boolean)
     .join("\n\n");
 
+  // Un modello più capace solo quando si costruisce una pagina nuova: le correzioni
+  // piccole restano sul modello economico.
+  const intent: AiIntent = wantsNewLook ? "page" : "edit";
+  let target: AiTarget;
+  try {
+    target = await aiTarget(intent);
+  } catch (error) {
+    await logError({
+      source: "ai",
+      message: "Configurazione provider AI non valida",
+      detail: String(error),
+      userId: user.id,
+    });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Configurazione AI non valida" },
+      { status: 500 },
+    );
+  }
+
+  const usage = { prompt: 0, output: 0, cached: 0 };
+  function addUsage(data: unknown) {
+    const round = readUsage(data);
+    usage.prompt += round.prompt;
+    usage.output += round.output;
+    usage.cached += round.cached;
+  }
+  async function flushUsage() {
+    await recordAiUsage({
+      userId,
+      siteId,
+      provider: target.provider,
+      model: target.model,
+      prompt: usage.prompt,
+      output: usage.output,
+      cached: usage.cached,
+    });
+  }
+
   const contents: Turn[] = [{ role: "user", parts: [{ text: requestText }] }];
 
   async function callGemini(turns: Turn[]) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const payload = {
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: turns,
+      tools: [{ functionDeclarations: FUNCTION_DECLARATIONS }],
+      generationConfig: generationConfig(intent),
+    };
+
+    let res = await fetch(target.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: turns,
-        tools: [{ functionDeclarations: FUNCTION_DECLARATIONS }],
-      }),
+      headers: target.headers,
+      body: JSON.stringify(payload),
     });
+
+    // thinkingConfig non è accettato da tutti i modelli: è l'unico campo
+    // opzionale che aggiungiamo, quindi al primo 400 si riprova senza.
+    const config = payload.generationConfig as Record<string, unknown>;
+    if (res.status === 400 && "thinkingConfig" in config) {
+      const detail = await res.clone().text().catch(() => "");
+      delete config.thinkingConfig;
+      res = await fetch(target.url, {
+        method: "POST",
+        headers: target.headers,
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        await logError({
+          source: "ai",
+          message: `Riprova senza thinkingConfig: ${res.status}`,
+          detail: detail.slice(0, 300),
+          userId,
+        });
+      }
+    }
     return res;
   }
 
@@ -456,7 +569,9 @@ export async function POST(req: Request) {
   const calls: ToolCall[] = [];
   const texts: string[] = [];
   let ask: Ask | null = null;
-  const MAX_ROUNDS = 6;
+  // Ogni round rimanda al modello istruzioni, schema dei tool e stato del sito:
+  // meno round = meno token. Quattro bastano per una pagina completa.
+  const MAX_ROUNDS = Math.min(8, Math.max(1, Number(process.env.AI_MAX_ROUNDS) || 4));
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const res = await callGemini(contents);
@@ -466,6 +581,7 @@ export async function POST(req: Request) {
       if (calls.length) {
         const fallback = texts.join(" ").trim() || "Ho aggiornato la pagina.";
         await updateSite(siteId, { config: site });
+        await flushUsage();
         const messages = await appendChat(siteId, [
           { role: "user", text: message || "Ho caricato delle foto.", images },
           { role: "assistant", text: fallback, ask: ask ?? undefined },
@@ -474,25 +590,30 @@ export async function POST(req: Request) {
       }
       await logError({
         source: "chat",
-        message: `Gemini ${res.status}`,
+        message: `${target.label} ${res.status}`,
         detail: await res.clone().text().catch(() => ""),
         userId: user.id,
       });
 
       if (res.status === 429) {
         return NextResponse.json(
-          { error: "Limite Gemini raggiunto (429): quota o frequenza esaurita. Riprova tra un minuto o controlla la quota nel tuo progetto Google AI Studio." },
+          {
+            error: `Limite ${target.label} raggiunto (429): quota o frequenza esaurita. Riprova tra un minuto o controlla la quota del progetto.`,
+          },
           { status: 429 },
         );
       }
       const detail = await res.text().catch(() => "");
       return NextResponse.json(
-        { error: `Errore Gemini (${res.status}) con modello "${MODEL}": ${detail.slice(0, 300)}` },
+        {
+          error: `Errore ${target.label} (${res.status}) con modello "${target.model}": ${detail.slice(0, 300)}`,
+        },
         { status: 502 },
       );
     }
 
     const data = await res.json();
+    addUsage(data);
     const parts: Part[] = data?.candidates?.[0]?.content?.parts ?? [];
     const roundCalls = parts.filter((p) => p.functionCall);
     const text = parts
@@ -543,6 +664,48 @@ export async function POST(req: Request) {
     });
   }
 
+  // Un documento troncato a metà è peggio di nessuna modifica: si chiede una riparazione.
+  if (site.html) {
+    let problems = validateHtml(site.html);
+    if (problems.length) {
+      const repair = await callGemini([
+        ...contents,
+        {
+          role: "user",
+          parts: [
+            {
+              text: `L'HTML scritto è incompleto: ${problems.join("; ")}. Riscrivilo per intero con write_html, completo e chiuso, senza cambiare il design.`,
+            },
+          ],
+        },
+      ]).catch(() => null);
+
+      if (repair?.ok) {
+        const data = await repair.json().catch(() => null);
+        if (data) addUsage(data);
+        const fixed: ToolCall[] = ((data?.candidates?.[0]?.content?.parts ?? []) as Part[])
+          .filter((part) => part.functionCall?.name === "write_html")
+          .map((part) => ({ name: part.functionCall!.name, args: part.functionCall!.args ?? {} }));
+        if (fixed.length) {
+          site = applyToolCalls(site, fixed);
+          calls.push(...fixed);
+        }
+      }
+
+      problems = validateHtml(site.html ?? "");
+      if (problems.length) {
+        site = { ...site, html: record.config.html };
+        texts.push("La pagina generata risultava incompleta e non l'ho salvata: ripeti la richiesta.");
+      }
+    }
+  }
+
+  if (site.html) site = { ...site, html: sanitizeHtmlStrict(site.html) };
+
+  site = withLegalAck(record.config, site, {
+    ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
+    userAgent: req.headers.get("user-agent") ?? undefined,
+  });
   const changed = JSON.stringify(site) !== JSON.stringify(record.config);
   const reply = texts.join(" ").replace(/\s+/g, " ").trim();
   let finalReply =
@@ -552,6 +715,7 @@ export async function POST(req: Request) {
   if (!changed && !ask && claimsChange(finalReply)) finalReply = NO_CHANGE_REPLY;
 
   if (changed) await updateSite(siteId, { config: site });
+  await flushUsage();
   const messages = await appendChat(siteId, [
     { role: "user", text: message || "Ho caricato delle foto.", images },
     { role: "assistant", text: finalReply, ask: ask ?? undefined },

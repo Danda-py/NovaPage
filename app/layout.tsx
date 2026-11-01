@@ -28,17 +28,9 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     images: ["/opengraph-image"],
   },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
-  },
+  // Nessun robots qui: con lo streaming il layout e la pagina emettono entrambi
+  // il tag e una pagina noindex si ritroverebbe anche un "index, follow".
+  // Il default è già indicizzabile; chi deve escludersi lo dichiara nella pagina.
 };
 
 export const viewport: Viewport = {

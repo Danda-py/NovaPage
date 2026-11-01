@@ -10,6 +10,8 @@ export async function sendEmail(input: {
   subject: string;
   html: string;
   text?: string;
+  /** Risposta del titolare: i messaggi del destinatario tornano a lui. */
+  replyTo?: string;
 }): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
@@ -25,6 +27,7 @@ export async function sendEmail(input: {
         subject: input.subject,
         html: input.html,
         text: input.text,
+        ...(input.replyTo ? { reply_to: input.replyTo } : null),
       }),
     });
     if (!res.ok) {
@@ -61,6 +64,26 @@ export function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/** Conferma al visitatore che ha compilato il modulo: chiude il cerchio e riduce i doppioni. */
+export function leadThankYouHtml(input: { title: string; url: string; name: string }): string {
+  const hello = input.name ? `Ciao ${escapeHtml(input.name)},` : "Ciao,";
+  return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
+  <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">NovaPage</p>
+  <h1 style="font-size:20px;margin:0 0 12px">Messaggio ricevuto</h1>
+  <p style="font-size:14px;line-height:1.6;color:#a1a1aa;margin:0 0 16px">${hello} la tua richiesta è arrivata a ${escapeHtml(input.title)}. Ti risponderemo ai recapiti che hai indicato.</p>
+  <p style="font-size:12px;line-height:1.6;color:#52525b;margin:0">Hai ricevuto questa email perché hai compilato il modulo su <a href="${escapeHtml(input.url)}" style="color:#8b5cf6">${escapeHtml(input.url)}</a>. Se non sei stato tu, ignora il messaggio.</p>
+</div>`;
+}
+
+/** Risposta del titolare a chi ha compilato il modulo: testo semplice, nessun tracciamento. */
+export function leadReplyHtml(input: { title: string; body: string; siteEmail: string }): string {
+  return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
+  <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">${escapeHtml(input.title)}</p>
+  <div style="font-size:14px;line-height:1.7;color:#d4d4d8;white-space:pre-wrap">${escapeHtml(input.body)}</div>
+  <p style="font-size:12px;color:#52525b;margin:24px 0 0">Rispondi pure a questa email: arriva a ${escapeHtml(input.siteEmail)}.</p>
+</div>`;
 }
 
 /** Email al titolare della pagina quando il modulo contatti riceve un messaggio. */

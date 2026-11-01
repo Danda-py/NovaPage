@@ -8,3 +8,13 @@ body {
   background: #09090b;
   color: #f4f4f5;
 }
+
+/* Touch targets: i link di navigazione nel footer restano compatti ma cliccabili
+   anche col pollice (minimo 36px di altezza, WCAG 2.5.8 chiede 24). */
+footer nav a,
+.legal-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 2px;
+}

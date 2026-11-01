@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { addLead, deleteLead, findOwnerContact, listLeads } from "@/lib/store";
+import { addLead, deleteLead, findOwnerContact, listLeads, updateLead } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 import { emailConfigured, leadNotificationHtml, sendEmail } from "@/lib/email";
@@ -42,6 +42,38 @@ export async function DELETE(req: Request) {
   const deleted = await deleteLead(body.siteId, body.leadId);
   if (!deleted) return NextResponse.json({ error: "Contatto non trovato" }, { status: 404 });
   return NextResponse.json({ ok: true });
+}
+
+/** Stato "gestito" e nota privata: solo il titolare del sito può scriverli. */
+export async function PATCH(req: Request) {
+  const body = (await req.json().catch(() => null)) as {
+    siteId?: string;
+    leadId?: string;
+    handled?: boolean;
+    notes?: string;
+  } | null;
+  if (!body?.siteId || !body?.leadId) {
+    return NextResponse.json({ error: "siteId e leadId sono obbligatori" }, { status: 400 });
+  }
+
+  const guard = await requireSite(body.siteId);
+  if (!guard.ok) {
+    return NextResponse.json(
+      { error: guard.reason === "auth" ? "Autenticazione richiesta" : "Sito non trovato" },
+      { status: guard.reason === "auth" ? 401 : 404 },
+    );
+  }
+
+  if (body.notes !== undefined && body.notes.length > 2000) {
+    return NextResponse.json({ error: "Nota troppo lunga (max 2000 caratteri)" }, { status: 400 });
+  }
+
+  const lead = await updateLead(body.siteId, body.leadId, {
+    handled: typeof body.handled === "boolean" ? body.handled : undefined,
+    notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
+  });
+  if (!lead) return NextResponse.json({ error: "Contatto non trovato" }, { status: 404 });
+  return NextResponse.json({ lead });
 }
 
 export async function POST(req: Request) {

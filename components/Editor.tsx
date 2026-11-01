@@ -9,8 +9,9 @@ import { AskForm } from "@/components/AskForm";
 import { Brand } from "@/components/Brand";
 import { ManualEditor } from "@/components/ManualEditor";
 import { HtmlEditor } from "@/components/HtmlEditor";
+import { PageSettings } from "@/components/PageSettings";
 import { CustomPage } from "@/components/CustomPage";
-import { isHtmlPage } from "@/lib/html";
+import { isHtmlPage, sanitizeHtml } from "@/lib/html";
 
 const SUGGESTIONS = [
   "Landing per il mio bar con orari e pulsante WhatsApp",
@@ -51,7 +52,7 @@ export function Editor({
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"chat" | "edit" | "html" | "preview">("chat");
+  const [tab, setTab] = useState<"chat" | "edit" | "html" | "settings" | "preview">("chat");
   const [save, setSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
   const firstRender = useRef(true);
@@ -392,13 +393,21 @@ export function Editor({
       )}
 
       <div className="flex border-b border-zinc-800 md:hidden">
-        {(["chat", "edit", "html", "preview"] as const).map((t) => (
+        {(["chat", "edit", "html", "settings", "preview"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`min-h-11 flex-1 text-sm font-medium ${tab === t ? "text-violet-400" : "text-zinc-500"}`}
+            className={`min-h-11 flex-1 text-[13px] font-medium ${tab === t ? "text-violet-400" : "text-zinc-500"}`}
           >
-            {t === "chat" ? "Chat" : t === "edit" ? "Modifica" : t === "html" ? "HTML" : "Anteprima"}
+            {t === "chat"
+              ? "Chat"
+              : t === "edit"
+                ? "Modifica"
+                : t === "html"
+                  ? "HTML"
+                  : t === "settings"
+                    ? "Pagina"
+                    : "Anteprima"}
           </button>
         ))}
       </div>
@@ -408,7 +417,7 @@ export function Editor({
           className={`${tab === "preview" ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col md:flex md:max-w-sm md:border-r md:border-zinc-800`}
         >
           <div className="hidden shrink-0 gap-1 border-b border-zinc-800 p-2 md:flex">
-            {(["chat", "edit", "html"] as const).map((t) => (
+            {(["chat", "edit", "html", "settings"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -418,7 +427,7 @@ export function Editor({
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                {t === "chat" ? "Chat" : t === "edit" ? "Modifica" : "HTML"}
+                {t === "chat" ? "Chat" : t === "edit" ? "Modifica" : t === "html" ? "HTML" : "Pagina"}
               </button>
             ))}
           </div>
@@ -435,12 +444,15 @@ export function Editor({
           <div className={`${tab === "html" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
             <HtmlEditor site={site} onChange={setSite} />
           </div>
+          <div className={`${tab === "settings" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
+            <PageSettings site={site} onChange={setSite} />
+          </div>
         </div>
         <div className={`${tab === "preview" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto md:block`}>
           <div className="mx-auto w-full px-0 py-0 md:max-w-[420px] md:px-6 md:py-8">
             <div className="min-h-full overflow-hidden bg-zinc-950 md:rounded-[2.25rem] md:border md:border-zinc-800 md:shadow-2xl">
               {isHtmlPage(site) ? (
-                <CustomPage html={site.html!} siteId={siteId} trackViews={false} />
+                <CustomPage html={sanitizeHtml(site.html!)} siteId={siteId} trackViews={false} />
               ) : (
                 <SitePreview
                   site={site}

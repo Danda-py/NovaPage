@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getSiteBySlug } from "@/lib/store";
+import { htmlPalette, isHtmlPage } from "@/lib/html";
 
 export const alt = "Anteprima della pagina";
 export const size = { width: 1200, height: 630 };
@@ -13,9 +14,12 @@ export default async function Image({ params }: { params: Promise<{ slug: string
 
   const title = source?.meta.title ?? "NovaPage";
   const description = source?.meta.description ?? "";
-  const bg = source?.theme.bg_color ?? "#08070f";
-  const text = source?.theme.text_color ?? "#f3f0ff";
-  const accent = source?.theme.accent_color ?? "#8b5cf6";
+  // Una pagina in HTML libero ha i suoi colori nel CSS: l'anteprima social deve
+  // somigliare alla pagina, non al tema di default.
+  const palette = source && isHtmlPage(source) ? htmlPalette(source.html ?? "") : {};
+  const bg = palette.bg ?? source?.theme.bg_color ?? "#08070f";
+  const text = palette.text ?? source?.theme.text_color ?? "#f3f0ff";
+  const accent = palette.accent ?? source?.theme.accent_color ?? "#8b5cf6";
   const accent2 = source?.theme.accent2 ?? "#22d3ee";
 
   return new ImageResponse(

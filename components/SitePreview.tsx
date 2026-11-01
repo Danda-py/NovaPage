@@ -1,4 +1,5 @@
 import type { Block, BlockData, ButtonIcon, LinkButton, Site, Theme, ThemeFont } from "@/lib/site";
+import { legibleAccent, readableOn } from "@/lib/colors";
 import { LeadForm } from "@/components/LeadForm";
 import { InfoBlock } from "@/components/InfoBlock";
 
@@ -224,13 +225,13 @@ export function SitePreview({
 
         <footer className="flex flex-col items-center gap-2 pt-5 text-center">
           {(site.legal?.businessName || site.legal?.vat || site.legal?.address) && (
-            <div className="space-y-0.5 text-[10px] leading-relaxed" style={{ color: alpha(t.text_color, 0.42) }}>
+            <div className="space-y-0.5 text-[10px] leading-relaxed" style={{ color: alpha(t.text_color, 0.55) }}>
               {site.legal.businessName && <p>{site.legal.businessName}</p>}
               {site.legal.vat && <p>P.IVA {site.legal.vat}</p>}
               {site.legal.address && <p>{site.legal.address}</p>}
             </div>
           )}
-          <span className="text-[10px] uppercase tracking-[0.18em]" style={{ color: alpha(t.text_color, 0.3) }}>
+          <span className="text-[10px] uppercase tracking-[0.18em]" style={{ color: alpha(t.text_color, 0.55) }}>
             {site.meta.title}
           </span>
           <span
@@ -298,6 +299,10 @@ function BlockView({
             <img
               src={d.avatar}
               alt={d.title ?? ""}
+              width={80}
+              height={80}
+              decoding="async"
+              fetchPriority="high"
               className="mb-5 h-20 w-20 object-cover"
               style={{
                 borderRadius: k.editorial ? "4px" : "9999px",
@@ -320,7 +325,7 @@ function BlockView({
                 style={{
                   borderRadius: "9999px",
                   backgroundColor: alpha(t.accent_color, 0.16),
-                  color: t.accent_color,
+                  color: legibleAccent(t.accent_color, t.bg_color),
                   border: `1px solid ${alpha(t.accent_color, 0.28)}`,
                 }}
               >
@@ -463,7 +468,7 @@ function BlockView({
             className="flex w-full items-center justify-center gap-2.5 py-3.5 text-[13.5px] font-semibold transition-transform active:scale-[0.99]"
             style={{
               borderRadius: k.radius,
-              color: ghost ? (custom ?? t.text_color) : t.style === "neon" ? "#08080c" : "#fff",
+              color: ghost ? (custom ?? t.text_color) : readableOn(custom ?? t.accent_color),
               backgroundImage: !ghost && !custom && k.vivid ? k.gradient : undefined,
               backgroundColor: ghost
                 ? alpha(custom ?? t.text_color, 0.06)
@@ -505,7 +510,16 @@ function BlockView({
                 >
                   {p.image && isUsableUrl(p.image) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt={p.name} className="h-14 w-14 shrink-0 object-cover" style={{ borderRadius: "6px" }} />
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      width={56}
+                      height={56}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-14 w-14 shrink-0 object-cover"
+                      style={{ borderRadius: "6px" }}
+                    />
                   ) : (
                     <div
                       className="flex h-14 w-14 shrink-0 items-center justify-center text-[15px] font-semibold"
@@ -545,7 +559,7 @@ function BlockView({
                         {p.price}
                       </span>
                       {p.lowestPrice30 && (
-                        <span className="block text-[9px]" style={{ color: alpha(t.text_color, 0.45) }}>
+                        <span className="block text-[9px]" style={{ color: alpha(t.text_color, 0.55) }}>
                           min 30 gg: {p.lowestPrice30}
                         </span>
                       )}
@@ -564,7 +578,15 @@ function BlockView({
           <article key={p.id} className={`overflow-hidden border ${extraClass}`} style={card}>
                   {p.image && isUsableUrl(p.image) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt={p.name} className="aspect-square w-full object-cover" />
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      width={400}
+                      height={400}
+                      loading="lazy"
+                      decoding="async"
+                      className="aspect-square w-full object-cover"
+                    />
                   ) : (
                     <div
                       className="flex aspect-square w-full items-center justify-center"
@@ -607,7 +629,7 @@ function BlockView({
                             {p.price}
                           </span>
                           {p.lowestPrice30 && (
-                            <span className="mt-0.5 block text-[9px]" style={{ color: alpha(t.text_color, 0.45) }}>
+                            <span className="mt-0.5 block text-[9px]" style={{ color: alpha(t.text_color, 0.55) }}>
                               min 30 gg: {p.lowestPrice30}
                             </span>
                           )}
@@ -639,7 +661,7 @@ function BlockView({
               <div className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {items.map((p) => cardNode(p, "w-[62%] shrink-0 snap-center"))}
               </div>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: alpha(t.text_color, 0.4) }}>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: alpha(t.text_color, 0.55) }}>
                 scorri →
               </p>
             </>
@@ -690,7 +712,15 @@ function BlockView({
                   style={{ aspectRatio: "4 / 5", borderRadius: radius, border: `1px solid ${k.line}` }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="h-full w-full object-cover" />
+                  <img
+                    src={src}
+                    alt=""
+                    width={640}
+                    height={800}
+                    loading={i === 0 ? "eager" : "lazy"}
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                   <span
                     className="absolute bottom-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium"
                     style={{ backgroundColor: alpha(t.bg_color, 0.72), color: alpha(t.text_color, 0.9) }}
@@ -700,7 +730,7 @@ function BlockView({
                 </div>
               ))}
             </div>
-            <p className="mt-1.5 text-[10px] uppercase tracking-[0.2em]" style={{ color: alpha(t.text_color, 0.4) }}>
+            <p className="mt-1.5 text-[10px] uppercase tracking-[0.2em]" style={{ color: alpha(t.text_color, 0.55) }}>
               scorri →
             </p>
           </section>
@@ -717,6 +747,10 @@ function BlockView({
                 key={i}
                 src={src}
                 alt=""
+                width={400}
+                height={400}
+                loading="lazy"
+                decoding="async"
                 className="aspect-square w-full object-cover"
                 style={{ borderRadius: radius, border: `1px solid ${k.line}` }}
               />
@@ -750,6 +784,7 @@ function BlockView({
           title={d.title}
           text={d.text}
           accent={t.accent_color}
+          onAccent={readableOn(t.accent_color)}
           textColor={t.text_color}
           soft={k.soft}
           line={k.line}
@@ -798,7 +833,7 @@ function BlockView({
                   borderRadius: k.radius,
                   backgroundImage: k.vivid ? k.gradient : undefined,
                   backgroundColor: k.vivid ? undefined : t.accent_color,
-                  color: t.style === "neon" ? "#08080c" : "#fff",
+                  color: readableOn(t.accent_color),
                   boxShadow: k.vivid ? k.glow : undefined,
                 }}
               >

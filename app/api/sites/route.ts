@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as {
     title?: string;
     duplicateOf?: string;
+    template?: string;
   } | null;
 
   if (typeof body?.duplicateOf === "string" && body.duplicateOf) {
@@ -23,6 +24,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ site: copy }, { status: 201 });
   }
 
-  const site = await createSite(user.id, body?.title ?? "La mia pagina");
+  const site = await createSite(
+    user.id,
+    body?.title ?? "La mia pagina",
+    typeof body?.template === "string" ? body.template : undefined,
+  );
   return NextResponse.json({ site }, { status: 201 });
 }

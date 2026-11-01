@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { newId, type Ask, type Site } from "./site";
+import { newId, SITE_TEMPLATES, templateConfig, type Ask, type Site } from "./site";
 
 export type ChatMessage = {
   id: string;
@@ -42,6 +42,11 @@ export type StoredSite = {
 
 export type DayStat = { day: string; views: number; clicks: number };
 
+/** Snapshot salvato prima di una modifica: permette di tornare indietro. */
+export type SiteVersion = { id: string; createdAt: string };
+
+const MAX_VERSIONS = 20;
+
 export type Lead = {
   id: string;
   siteId: string;
@@ -52,6 +57,11 @@ export type Lead = {
   createdAt: string;
   read: boolean;
   consentAt: string | null;
+  /** Il titolare ha già gestito la richiesta. */
+  handled: boolean;
+  /** Promemoria privato del titolare: non esce mai dalla sua area. */
+  notes: string;
+  repliedAt: string | null;
 };
 
 const MAX_CHAT = 300;
@@ -106,6 +116,9 @@ type LeadRow = {
   message: string;
   read: boolean;
   consent_at: string | Date | null;
+  handled: boolean | null;
+  notes: string | null;
+  replied_at: string | Date | null;
   created_at: string | Date;
 };
 
@@ -158,6 +171,9 @@ const mapLead = (row: LeadRow): Lead => ({
   message: row.message,
   read: row.read,
   consentAt: row.consent_at ? iso(row.consent_at) : null,
+  handled: row.handled ?? false,
+  notes: row.notes ?? "",
+  repliedAt: row.replied_at ? iso(row.replied_at) : null,
   createdAt: iso(row.created_at),
 });
 
@@ -237,8 +253,15 @@ export async function getSiteBySlug(slug: string): Promise<StoredSite | null> {
   return rows[0] ? mapSite(rows[0]) : null;
 }
 
-export async function createSite(ownerId: string, title: string): Promise<StoredSite> {
+export async function createSite(
+  ownerId: string,
+  title: string,
+  template?: string,
+): Promise<StoredSite> {
   const clean = title.trim().slice(0, 60) || "La mia pagina";
+  if (template && SITE_TEMPLATES.some((item) => item.id === template)) {
+    return insertSite(ownerId, templateConfig(clean, template), clean);
+  }
   const config = {
     meta: { title: clean, description: "Pagina creata con NovaPage" },
     theme: {
@@ -312,6 +335,12 @@ export async function updateSite(
   if (!exists.length) return null;
 
   if (patch.config && Array.isArray(patch.config.blocks)) {
+    const previous = (await sql`select config from sites where id = ${siteId} limit 1`) as Array<{
+      config: Site;
+    }>;
+    if (previous[0] && JSON.stringify(previous[0].config) !== JSON.stringify(patch.config)) {
+      await saveVersion(siteId, previous[0].config);
+    }
     await sql`update sites set config = ${JSON.stringify(patch.config)}::jsonb, updated_at = now() where id = ${siteId}`;
   }
   if (patch.slug) {
@@ -334,8 +363,54 @@ export async function updateSite(
   return getSite(siteId);
 }
 
-export async function deleteSite(siteId: string): Promise<boolean> {
+/**
+ * Cronologia: la configurazione precedente viene salvata prima di ogni modifica
+ * e si tengono le ultime 20 per pagina. Un errore qui non deve mai rompere il
+ * salvataggio: l'utente perde la cronologia, non la pagina.
+ */
+export async function saveVersion(siteId: string, config: Site): Promise<void> {
+  try {
+    const sql = db();
+    await sql`
+      insert into site_versions (id, site_id, config)
+      values (${id("ver")}, ${siteId}, ${JSON.stringify(config)}::jsonb)
+    `;
+    await sql`
+      delete from site_versions
+      where site_id = ${siteId}
+        and id not in (
+          select id from site_versions where site_id = ${siteId}
+          order by created_at desc limit ${MAX_VERSIONS}
+        )
+    `;
+  } catch {
+    // cronologia non disponibile (migrazione non applicata): si continua
+  }
+}
+
+export async function listVersions(siteId: string): Promise<SiteVersion[]> {
+  try {
+    const sql = db();
+    const rows = (await sql`
+      select id, created_at from site_versions
+      where site_id = ${siteId}
+      order by created_at desc limit ${MAX_VERSIONS}
+    `) as Array<{ id: string; created_at: string | Date }>;
+    return rows.map((row) => ({ id: row.id, createdAt: iso(row.created_at) }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getVersion(siteId: string, versionId: string): Promise<Site | null> {
   const sql = db();
+  const rows = (await sql`
+    select config from site_versions where id = ${versionId} and site_id = ${siteId} limit 1
+  `) as Array<{ config: Site }>;
+  return rows[0]?.config ?? null;
+}
+
+export async function deleteSite(siteId: string): Promise<boolean> {  const sql = db();
   const rows = (await sql`delete from sites where id = ${siteId} returning id`) as Array<{ id: string }>;
   return rows.length > 0;
 }
@@ -427,6 +502,43 @@ export async function deleteLead(siteId: string, leadId: string): Promise<boolea
     delete from leads where id = ${leadId} and site_id = ${siteId} returning id
   `) as Array<{ id: string }>;
   return rows.length > 0;
+}
+
+/** Un solo contatto: serve alla risposta e al cambio di stato. */
+export async function getLead(siteId: string, leadId: string): Promise<Lead | null> {
+  const sql = db();
+  const rows = (await sql`
+    select * from leads where id = ${leadId} and site_id = ${siteId} limit 1
+  `) as LeadRow[];
+  return rows[0] ? mapLead(rows[0]) : null;
+}
+
+/** Stato "gestito" e nota privata del titolare. I campi assenti restano invariati. */
+export async function updateLead(
+  siteId: string,
+  leadId: string,
+  patch: { handled?: boolean; notes?: string },
+): Promise<Lead | null> {
+  const sql = db();
+  const rows = (await sql`
+    update leads set
+      handled = coalesce(${patch.handled ?? null}::boolean, handled),
+      notes = coalesce(${patch.notes ?? null}::text, notes)
+    where id = ${leadId} and site_id = ${siteId}
+    returning *
+  `) as LeadRow[];
+  return rows[0] ? mapLead(rows[0]) : null;
+}
+
+/** Dopo una risposta inviata: il contatto risulta letto, gestito e con la data. */
+export async function markLeadReplied(siteId: string, leadId: string): Promise<Lead | null> {
+  const sql = db();
+  const rows = (await sql`
+    update leads set replied_at = now(), handled = true, read = true
+    where id = ${leadId} and site_id = ${siteId}
+    returning *
+  `) as LeadRow[];
+  return rows[0] ? mapLead(rows[0]) : null;
 }
 
 export async function markLeadsRead(siteId: string): Promise<number> {
@@ -584,6 +696,34 @@ export async function updateUserPassword(
   `;
 }
 
+export type EmailUpdate = "ok" | "taken" | "missing";
+
+/** Cambio email: il vincolo unique è la sola condizione di errore prevedibile. */
+export async function updateUserEmail(userId: string, email: string): Promise<EmailUpdate> {
+  const sql = db();
+  try {
+    const rows = (await sql`
+      update users set email = ${email.toLowerCase().trim()}
+      where id = ${userId} returning id
+    `) as Array<{ id: string }>;
+    return rows.length > 0 ? "ok" : "missing";
+  } catch (error) {
+    if (isUniqueViolation(error)) return "taken";
+    throw error;
+  }
+}
+
+/** Segna come letti tutti i contatti dei siti dell'utente, in una sola query. */
+export async function markAllLeadsReadForOwner(ownerId: string): Promise<number> {
+  const sql = db();
+  const rows = (await sql`
+    update leads set read = true
+    where read = false and site_id in (select id from sites where owner_id = ${ownerId})
+    returning id
+  `) as Array<{ id: string }>;
+  return rows.length;
+}
+
 export async function deleteUser(userId: string): Promise<void> {
   const sql = db();
   await sql`delete from users where id = ${userId}`;
@@ -641,6 +781,52 @@ export async function hitRateLimit(
   if (!row) return { ok: true, retryAfter: 0 };
   const retryAfter = Math.max(1, Math.ceil((new Date(row.reset_at).getTime() - Date.now()) / 1000));
   return { ok: row.count <= limit, retryAfter };
+}
+
+/**
+ * Contabilità dei token: serve a sapere quanto costa l'assistente e a tarare
+ * modello e limiti senza indovinare. Non deve mai rompere la chat.
+ */
+export async function recordAiUsage(input: {
+  userId?: string;
+  siteId?: string;
+  provider: string;
+  model: string;
+  prompt: number;
+  output: number;
+  cached?: number;
+}): Promise<void> {
+  try {
+    const sql = db();
+    await sql`
+      insert into ai_usage (user_id, site_id, provider, model, prompt_tokens, output_tokens, cached_tokens)
+      values (${input.userId ?? null}, ${input.siteId ?? null}, ${input.provider.slice(0, 40)},
+              ${input.model.slice(0, 80)}, ${Math.max(0, Math.round(input.prompt))},
+              ${Math.max(0, Math.round(input.output))}, ${Math.max(0, Math.round(input.cached ?? 0))})
+    `;
+  } catch {
+    // la telemetria non è essenziale: se manca la tabella si continua
+  }
+}
+
+export type AiUsageSummary = { prompt: number; output: number; cached: number; requests: number };
+
+/** Token consumati dall'utente nel mese corrente. */
+export async function aiUsageThisMonth(userId: string): Promise<AiUsageSummary> {
+  try {
+    const sql = db();
+    const rows = (await sql`
+      select coalesce(sum(prompt_tokens), 0)::int as prompt,
+             coalesce(sum(output_tokens), 0)::int as output,
+             coalesce(sum(cached_tokens), 0)::int as cached,
+             count(*)::int as requests
+      from ai_usage
+      where user_id = ${userId} and created_at >= date_trunc('month', now())
+    `) as Array<{ prompt: number; output: number; cached: number; requests: number }>;
+    return rows[0] ?? { prompt: 0, output: 0, cached: 0, requests: 0 };
+  } catch {
+    return { prompt: 0, output: 0, cached: 0, requests: 0 };
+  }
 }
 
 export async function logError(input: {

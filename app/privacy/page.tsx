@@ -54,7 +54,7 @@ const sections = [
     title: "I tuoi diritti",
     body: [
       "Puoi chiedere accesso, rettifica, cancellazione, limitazione e portabilità dei dati, oltre a opporti al trattamento fondato sul legittimo interesse (artt. 15-22 GDPR).",
-      "La cancellazione completa è disponibile direttamente nella dashboard con il pulsante «Elimina account»: rimuove account, siti, contatti e conversazioni in modo definitivo.",
+      "La cancellazione completa è disponibile nelle impostazioni account, alla voce «Elimina account»: rimuove account, siti, contatti e conversazioni in modo definitivo.",
       "Se ritieni che il trattamento violi la normativa puoi proporre reclamo al Garante per la protezione dei dati personali.",
     ],
   },
@@ -126,7 +126,7 @@ export default function PrivacyPage() {
             privacy@novapage.site
           </a>
           .
-          <div className="mt-3 flex gap-4 text-[12px]">
+          <div className="legal-links mt-3 flex flex-wrap gap-4 text-[12px]">
             <Link href="/termini" className="hover:text-zinc-300">Termini di servizio</Link>
             <Link href="/cookie" className="hover:text-zinc-300">Cookie policy</Link>
           </div>

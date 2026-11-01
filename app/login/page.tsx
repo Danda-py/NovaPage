@@ -15,7 +15,12 @@ export default async function LoginPage({
   if (user) redirect("/dashboard");
 
   const { next } = await searchParams;
-  const target = next && next.startsWith("/") ? next : "/dashboard";
+  // Solo percorsi interni: "//evil.com" inizia con "/" ma è un URL esterno, e
+  // dopo il login diventerebbe un redirect verso un altro sito.
+  const target =
+    next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")
+      ? next
+      : "/dashboard";
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-zinc-950 px-5 text-zinc-100">

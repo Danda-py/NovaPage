@@ -17,10 +17,16 @@ if (!demo) {
 }
 
 // La demo è contenuto pubblico del sito: resta senza proprietario e non viene ereditata.
+// Se la demo è già passata all'HTML libero, il re-seed non lo cancella.
 await sql`
   insert into sites (id, owner_id, slug, config)
   values ('site_demo', null, 'casa-aurora', ${JSON.stringify(demo.config)}::jsonb)
-  on conflict (slug) do update set config = excluded.config, updated_at = now()
+  on conflict (slug) do update set
+    config = excluded.config || case
+      when sites.config ? 'html' then jsonb_build_object('html', sites.config->'html')
+      else '{}'::jsonb
+    end,
+    updated_at = now()
 `;
 
 const rows = await sql`select id, slug, owner_id from sites where slug = 'casa-aurora'`;

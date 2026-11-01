@@ -39,7 +39,12 @@ export function CustomPage({
       onClick={(e) => {
         const anchor = (e.target as HTMLElement).closest("a");
         if (!anchor) return;
-        const label = anchor.textContent?.trim().slice(0, 60) || "link";
+        // Con icone e testi annidati textContent produce etichette illeggibili
+        // ("CACasa"): aria-label, se c'è, descrive già il pulsante.
+        const label =
+          anchor.getAttribute("aria-label")?.trim() ||
+          anchor.textContent?.replace(/\s+/g, " ").trim().slice(0, 60) ||
+          "link";
         track(siteId, label);
       }}
       dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}

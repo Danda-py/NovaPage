@@ -13,9 +13,23 @@ type Props = {
   radius: string;
   gradient: string;
   vivid: boolean;
+  /** Colore leggibile sopra il riempimento pieno del pulsante. */
+  onAccent?: string;
 };
 
-export function LeadForm({ siteId, title, text, accent, textColor, soft, line, radius, gradient, vivid }: Props) {
+export function LeadForm({
+  siteId,
+  title,
+  text,
+  accent,
+  textColor,
+  soft,
+  line,
+  radius,
+  gradient,
+  vivid,
+  onAccent = "#ffffff",
+}: Props) {
   const [values, setValues] = useState({ name: "", email: "", phone: "", message: "" });
   const [state, setState] = useState<"idle" | "sending" | "done">("idle");
   const [error, setError] = useState("");
@@ -181,7 +195,7 @@ export function LeadForm({ siteId, title, text, accent, textColor, soft, line, r
           borderRadius: radius,
           backgroundImage: vivid ? gradient : undefined,
           backgroundColor: vivid ? undefined : accent,
-          color: "#fff",
+          color: onAccent,
         }}
       >
         {preview ? "Modulo in anteprima" : state === "sending" ? "Invio…" : "Invia"}

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { deleteSite, updateSite } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
-import { normalizeSite, type Site } from "@/lib/site";
+import { normalizeSite, withLegalAck, type Site } from "@/lib/site";
+import { sanitizeHtmlStrict } from "@/lib/html-strict";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,7 +42,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (!normalized) {
       return NextResponse.json({ error: "Configurazione della pagina non valida" }, { status: 400 });
     }
-    config = normalized;
+    // Il parser passa sui contenuti scritti: è l'ultimo controllo prima del database.
+    if (normalized.html) normalized.html = sanitizeHtmlStrict(normalized.html);
+    config = withLegalAck(guard.site.config, normalized, {
+      ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
+      userAgent: req.headers.get("user-agent") ?? undefined,
+    });
   }
 
   const site = await updateSite(id, {

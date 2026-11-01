@@ -1,4 +1,4 @@
-import { MAX_HTML, sanitizeHtml, toHtmlFragment } from "./html";
+import { applyHtmlPatches, MAX_HTML, sanitizeHtml, toHtmlFragment } from "./html";
 
 export type BlockType =
   | "hero"
@@ -118,6 +118,10 @@ export type Site = {
    * blocchi. È il modo per costruire una landing senza schema imposto.
    */
   html?: string;
+  /** Responsabilità sul contenuto HTML: data, versione dell'avviso, traccia della richiesta. */
+  legalAck?: { at: string; notice: string; ip?: string; userAgent?: string };
+  /** Nasconde il badge "Creato con NovaPage" (riservato ai piani che lo prevedono). */
+  hideBadge?: boolean;
   legal?: SiteLegal;
 };
 
@@ -215,6 +219,56 @@ export const INITIAL_SITE: Site = {
   },
   blocks: [{ id: "blk_hero_start", type: "hero", data: { ...DEFAULT_DATA.hero } }],
 };
+
+export type SiteTemplateId = "essenziale" | "attivita" | "professionista" | "vetrina";
+
+export const SITE_TEMPLATES: Array<{ id: SiteTemplateId; label: string; hint: string }> = [
+  { id: "essenziale", label: "Essenziale", hint: "Hero e contatti" },
+  { id: "attivita", label: "Attività locale", hint: "Orari, foto, contatti" },
+  { id: "professionista", label: "Professionista", hint: "Servizi e modulo" },
+  { id: "vetrina", label: "Vetrina prodotti", hint: "Catalogo e modulo" },
+];
+
+/**
+ * Configurazione di partenza di un nuovo sito: il template cambia solo i blocchi,
+ * così l'utente non riparte sempre dalla stessa pagina vuota.
+ */
+export function templateConfig(title: string, template?: string): Site {
+  const clean = title.trim().slice(0, 60) || "La mia pagina";
+  const make = (type: BlockType, data: BlockData = {}): Block => ({
+    id: newId("blk"),
+    type,
+    data: { ...DEFAULT_DATA[type], ...data },
+  });
+
+  const blocks: Block[] = [make("hero", { title: clean })];
+  switch (template) {
+    case "attivita":
+      blocks.push(make("hours"), make("gallery"), make("contact"));
+      break;
+    case "professionista":
+      blocks.push(
+        make("links", {
+          buttons: [
+            { label: "Scrivimi su WhatsApp", url: "https://wa.me/39", icon: "whatsapp", variant: "primary" },
+          ],
+        }),
+        make("form"),
+      );
+      break;
+    case "vetrina":
+      blocks.push(make("catalog"), make("form"));
+      break;
+    default:
+      blocks.push(make("contact"));
+  }
+
+  return {
+    meta: { title: clean, description: "Pagina creata con NovaPage" },
+    theme: { ...INITIAL_SITE.theme },
+    blocks,
+  };
+}
 
 export function newId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`;
@@ -365,7 +419,56 @@ export function normalizeSite(raw: unknown): Site | null {
       }
     : undefined;
 
-  return { meta, theme, blocks, ...(legal ? { legal } : null), ...(html ? { html } : null) };
+  const rawAck = (r.legalAck && typeof r.legalAck === "object" ? r.legalAck : null) as Record<
+    string,
+    unknown
+  > | null;
+  const ackAt =
+    typeof rawAck?.at === "string"
+      ? rawAck.at.slice(0, 40)
+      : typeof r.legalAckAt === "string"
+        ? r.legalAckAt.slice(0, 40)
+        : undefined;
+  const legalAck = ackAt
+    ? {
+        at: ackAt,
+        notice: typeof rawAck?.notice === "string" ? rawAck.notice.slice(0, 20) : "html-v1",
+        ...(typeof rawAck?.ip === "string" ? { ip: rawAck.ip.slice(0, 60) } : null),
+        ...(typeof rawAck?.userAgent === "string" ? { userAgent: rawAck.userAgent.slice(0, 160) } : null),
+      }
+    : undefined;
+
+  return {
+    meta,
+    theme,
+    blocks,
+    ...(legal ? { legal } : null),
+    ...(html ? { html } : null),
+    ...(legalAck ? { legalAck } : null),
+    ...(r.hideBadge === true ? { hideBadge: true } : null),
+  };
+}
+
+/**
+ * La prima volta che una pagina passa all'HTML libero si registra la data in cui
+ * chi pubblica si assume la responsabilità del contenuto: vale sia per la chat
+ * sia per il salvataggio dall'editor.
+ */
+export function withLegalAck(
+  previous: Site | undefined,
+  next: Site,
+  meta: { ip?: string; userAgent?: string } = {},
+): Site {
+  if (!next.html || previous?.html || next.legalAck) return next;
+  return {
+    ...next,
+    legalAck: {
+      at: new Date().toISOString(),
+      notice: "html-v1",
+      ...(meta.ip ? { ip: meta.ip.slice(0, 60) } : null),
+      ...(meta.userAgent ? { userAgent: meta.userAgent.slice(0, 160) } : null),
+    },
+  };
 }
 
 /** Applies AI tool calls to a copy of the site and returns the new site. Invalid calls are ignored. */
@@ -428,6 +531,18 @@ export function applyToolCalls(site: Site, calls: ToolCall[]): Site {
         const description = str(a.description);
         if (title) next.meta.title = title;
         if (description) next.meta.description = description;
+        break;
+      }
+      case "patch_html": {
+        if (!next.html) break;
+        const ops = Array.isArray(a.patches) ? (a.patches as unknown[]) : [];
+        const result = applyHtmlPatches(
+          next.html,
+          ops
+            .filter((op): op is Record<string, unknown> => !!op && typeof op === "object")
+            .map((op) => ({ find: String(op.find ?? ""), replace: String(op.replace ?? "") })),
+        );
+        if (result.applied > 0) next.html = sanitizeHtml(toHtmlFragment(result.html));
         break;
       }
       case "write_html": {

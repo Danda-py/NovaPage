@@ -18,6 +18,17 @@ export const metadata: Metadata = {
     url: "/",
     type: "website",
   },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 const demo: Site = {
@@ -38,7 +49,7 @@ const demo: Site = {
         title: "Studio Aurora",
         subtitle: "Identità visiva e contenuti per brand indipendenti",
         badge: "Nuovi progetti aperti",
-        avatar: "/demo/studio.jpg",
+        avatar: "/demo/studio.webp",
       },
     },
     {
@@ -48,9 +59,9 @@ const demo: Site = {
         title: "Servizi",
         layout: "list",
         items: [
-          { id: "p1", name: "Identità visiva", price: "250€", status: "Disponibile", image: "/demo/identita.jpg" },
-          { id: "p2", name: "Sito one-page", price: "390€", status: "Disponibile", image: "/demo/sito.jpg" },
-          { id: "p3", name: "Contenuti mensili", price: "90€/mese", status: "Disponibile", image: "/demo/contenuti.jpg" },
+          { id: "p1", name: "Identità visiva", price: "250€", status: "Disponibile", image: "/demo/identita.webp" },
+          { id: "p2", name: "Sito one-page", price: "390€", status: "Disponibile", image: "/demo/sito.webp" },
+          { id: "p3", name: "Contenuti mensili", price: "90€/mese", status: "Disponibile", image: "/demo/contenuti.webp" },
         ],
       },
     },
@@ -205,7 +216,7 @@ export default function Landing() {
                   Vedi un esempio
                 </Link>
               </div>
-              <p className="mt-4 text-xs text-zinc-600">
+              <p className="mt-4 text-xs text-zinc-400">
                 Nessuna carta di credito · online in meno di un minuto
               </p>
             </div>
@@ -304,7 +315,7 @@ export default function Landing() {
 
       <footer className="border-t border-zinc-900">
         <div className="mx-auto max-w-6xl px-5 py-8">
-          <div className="flex flex-col items-center justify-between gap-3 text-xs text-zinc-600 sm:flex-row">
+          <div className="flex flex-col items-center justify-between gap-3 text-xs text-zinc-400 sm:flex-row">
             <Brand className="text-zinc-400" />
             <nav aria-label="Collegamenti del sito" className="flex flex-wrap justify-center gap-x-5">
               {[
@@ -335,7 +346,7 @@ export default function Landing() {
             </nav>
           </div>
 
-          <p className="mt-6 border-t border-zinc-900 pt-5 text-center text-[11px] leading-relaxed text-zinc-600">
+          <p className="mt-6 border-t border-zinc-900 pt-5 text-center text-[11px] leading-relaxed text-zinc-400">
             NovaPage è attualmente in versione Beta a scopo dimostrativo e di test. Il servizio viene
             fornito così com&apos;è, senza garanzie di uptime.
           </p>

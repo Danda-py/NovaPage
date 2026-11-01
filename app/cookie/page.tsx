@@ -142,7 +142,7 @@ export default function CookiePage() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-wrap gap-4 border-t border-zinc-900 pt-6 text-[12.5px] text-zinc-500">
+        <div className="legal-links mt-12 flex flex-wrap gap-4 border-t border-zinc-900 pt-6 text-[12.5px] text-zinc-500">
           <Link href="/privacy" className="hover:text-zinc-300">
             Informativa privacy
           </Link>

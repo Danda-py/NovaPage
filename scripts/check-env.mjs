@@ -6,7 +6,6 @@
 const required = [
   ["DATABASE_URL", "connessione al database Neon"],
   ["AUTH_SECRET", "firma dei cookie di sessione"],
-  ["GEMINI_API_KEY", "generazione e modifica delle pagine"],
 ];
 
 const recommended = [
@@ -16,7 +15,20 @@ const recommended = [
   ["EMAIL_FROM", "mittente delle email transazionali"],
 ];
 
-const optional = ["GEMINI_MODEL", "ANALYTICS_SALT", "ALLOW_LOCAL_UPLOADS", "CLAIM_LEGACY_SITES"];
+const optional = [
+  "AI_PROVIDER",
+  "AI_MODEL",
+  "AI_MODEL_PAGE",
+  "AI_MAX_OUTPUT_TOKENS",
+  "AI_MAX_ROUNDS",
+  "AI_THINKING_BUDGET",
+  "GEMINI_MODEL",
+  "GOOGLE_VERTEX_PROJECT",
+  "GOOGLE_VERTEX_LOCATION",
+  "ANALYTICS_SALT",
+  "ALLOW_LOCAL_UPLOADS",
+  "CLAIM_LEGACY_SITES",
+];
 
 const production = process.env.NODE_ENV === "production";
 const row = (state, name, note) => `${state} ${name.padEnd(24)} ${note}`;
@@ -32,6 +44,21 @@ for (const [name, note] of required) {
   if (!ok) missing += 1;
   console.log(row(ok ? "✓" : "✗", name, ok ? note : `${note} — MANCANTE`));
 }
+
+// L'assistente ha due strade: AI Studio (una chiave) o Vertex AI (chiave express o service account).
+const aiOk = Boolean(
+  process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_VERTEX_API_KEY ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+);
+if (!aiOk) missing += 1;
+console.log(
+  row(
+    aiOk ? "\u2713" : "\u2717",
+    "AI (Gemini/Vertex)",
+    aiOk ? "generazione e modifica delle pagine" : "GEMINI_API_KEY o credenziali Vertex — MANCANTE",
+  ),
+);
 
 for (const [name, note] of recommended) {
   const ok = Boolean(process.env[name]);

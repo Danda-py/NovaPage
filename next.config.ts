@@ -23,6 +23,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Il contenuto delle landing arriva dagli utenti: qui si nega tutto ciò che
+        // la sanificazione dovesse lasciar passare (plugin, <base> iniettati, framing).
+        source: "/s/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self' https:",
+          },
+        ],
+      },
+      {
         source: "/:path*",
         headers:
           process.env.NODE_ENV === "production"

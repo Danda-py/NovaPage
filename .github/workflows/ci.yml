@@ -29,3 +29,10 @@ jobs:
           PORT=3111 npm start >/tmp/next.log 2>&1 &
           for i in $(seq 1 40); do curl -sf http://localhost:3111/ >/dev/null && break; sleep 1; done
           node scripts/seo-audit.mjs --base-url=http://localhost:3111
+      - name: Visual and a11y check
+        run: |
+          npx playwright install --with-deps chromium
+          PORT=3112 npm start >/tmp/next2.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://localhost:3112/ >/dev/null && break; sleep 1; done
+          CHROME_PATH=$(find ~/.cache/ms-playwright -name chrome -type f | head -1) \
+            node scripts/visual-check.mjs --base-url=http://localhost:3112 --path=/,/privacy

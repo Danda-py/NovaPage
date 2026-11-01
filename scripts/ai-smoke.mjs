@@ -139,6 +139,40 @@ try {
     check("descrizione salvata", Boolean(product?.description), product?.description?.slice(0, 60));
     check("prezzo con migliaia", Boolean(product?.price?.includes("1.234,56")), product?.price);
   }
+
+  /*
+   * Il punto della modalità libera: due richieste diverse devono produrre due
+   * pagine diverse, e diverse da qualunque template. Il controllo è strutturale
+   * (HTML presente, CSS vero, nessuno script), non estetico.
+   */
+  console.log("\n4. landing in HTML libero, pagina su misura");
+  const step4 = await say(
+    site.id,
+    "Rifai la pagina da zero: studio di architettura a Torino, stile editoriale, tipografia grande, nessun template. Aggiungi anche un modulo per essere ricontattati.",
+  );
+  if (step4) {
+    const html = step4.site.html ?? "";
+    check("HTML generato", html.length > 1200, `${html.length} caratteri`);
+    check("CSS incluso", /<style\b[^>]*>[\s\S]{40,}<\/style>/i.test(html));
+    check("titolo principale", /<h1\b[^>]*>[\s\S]*?<\/h1>/i.test(html));
+    check("nessuno script", !/<script\b(?![^>]*ld\+json)/i.test(html));
+    check("modulo contatti", /data-novapage-lead|<form\b/i.test(html));
+    check("niente segnaposto", !/lorem ipsum|titolo qui|testo segnaposto/i.test(html));
+
+    const saved = await call("GET", `/api/sites/${site.id}`);
+    const stored = saved.json?.site?.config?.html ?? "";
+    check("HTML salvato nel database", stored.length > 1200, `${stored.length} caratteri`);
+    const ack = saved.json?.site?.config?.legalAck;
+    check("responsabilità registrata", Boolean(ack?.at), ack ? `${ack.notice ?? "?"} ${ack.at}` : "");
+  }
+
+  console.log("\n5. la pagina pubblicata è in HTML, non a blocchi");
+  const page = await fetch(`${BASE}/s/${site.slug}`);
+  const body = await page.text();
+  check("pagina 200", page.status === 200, String(page.status));
+  check("contenuto HTML servito", /<style\b/i.test(body) && /<h1\b/i.test(body));
+  check("badge visibile", body.includes("Creato con NovaPage"));
+  check("link legali", body.includes(`/s/${site.slug}/privacy`));
 } finally {
   const cleanup = await call("DELETE", "/api/account", { password: PASSWORD });
   console.log(`\ncleanup ${cleanup.status}`);

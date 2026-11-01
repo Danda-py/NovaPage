@@ -2,6 +2,7 @@ import { NextResponse, connection } from "next/server";
 import { pingDatabase, schemaReady } from "@/lib/store";
 import { emailConfigured } from "@/lib/email";
 import { storageConfigured } from "@/lib/storage";
+import { aiConfigured } from "@/lib/ai";
 
 /**
  * Stato del servizio: solo booleani, nessun valore di configurazione.
@@ -16,7 +17,7 @@ export async function GET() {
     database,
     schema,
     auth: Boolean(process.env.AUTH_SECRET),
-    ai: Boolean(process.env.GEMINI_API_KEY),
+    ai: aiConfigured(),
     email: emailConfigured(),
     storage: storageConfigured(),
   };

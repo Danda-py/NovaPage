@@ -3,9 +3,10 @@ export const metadata = { robots: { index: false } };
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
-import { countUnread, dailyStats, getSite, listLeads } from "@/lib/store";
+import { countUnread, dailyStats, getSite, listLeads, listVersions } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 import { SiteSettings } from "@/components/SiteSettings";
+import { VersionHistory } from "@/components/VersionHistory";
 import { MarkRead } from "@/components/MarkRead";
 import { DeleteLead } from "@/components/DeleteLead";
 import { siteReadiness } from "@/lib/readiness";
@@ -28,10 +29,11 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
   const site = await getSite(id);
   if (!site || site.ownerId !== user.id) notFound();
 
-  const [leads, unread, daily] = await Promise.all([
+  const [leads, unread, daily, versions] = await Promise.all([
     listLeads(site.id),
     countUnread(site.id),
     dailyStats(site.id, 30),
+    listVersions(site.id),
   ]);
   const readiness = siteReadiness(site.config);
   const clicks = Object.entries(site.stats.clicks).sort((a, b) => b[1] - a[1]);
@@ -113,6 +115,15 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
+          <h2 className="text-sm font-semibold">Cronologia</h2>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500">
+            Ogni modifica conserva la versione precedente, fino a 20 passi: se qualcosa si rompe, torni
+            indietro da qui.
+          </p>
+          <VersionHistory siteId={site.id} versions={versions} />
         </section>
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">

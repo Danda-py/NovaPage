@@ -169,7 +169,9 @@ export function siteJsonLd(input: { site: Site; slug: string; baseUrl: string })
   const hours = site.blocks.flatMap((block) =>
     block.type === "hours" ? (block.data.hours ?? []) : [],
   );
-  const photos = images(site, baseUrl);
+  // In HTML libero i blocchi non vengono renderizzati: non si dichiara nulla che la pagina non mostra.
+  const custom = isHtmlPage(site);
+  const photos = custom ? [] : images(site, baseUrl);
   const products = site.blocks
     .flatMap((block) => block.data.items ?? [])
     .filter((item) => parsePrice(item.price) !== null)
@@ -237,10 +239,10 @@ export function siteJsonLd(input: { site: Site; slug: string; baseUrl: string })
         { "@type": "ListItem", position: 2, name: title, item: url },
       ],
     },
-    business,
+    ...(custom ? [] : [business]),
   ];
 
-  if (products.length) {
+  if (products.length && !custom) {
     graph.push({
       "@type": "ItemList",
       "@id": `${url}#prodotti`,

@@ -64,9 +64,14 @@ export function HtmlEditor({
   site: Site;
   onChange: (next: Site) => void;
 }) {
-  const [draft, setDraft] = useState(site.html ?? "");
+  const external = site.html ?? "";
+  // Stato derivato dalla prop: se la chat riscrive l'HTML, la textarea mostra subito
+  // la versione nuova senza un effetto che rimbalza (e senza perdere quanto digitato).
+  const [editing, setEditing] = useState({ base: external, draft: external });
   const [open, setOpen] = useState(false);
-  const dirty = draft !== (site.html ?? "");
+  const draft = editing.base === external ? editing.draft : external;
+  const dirty = draft !== external;
+  const update = (value: string) => setEditing({ base: external, draft: value });
 
   function save() {
     const next = { ...site };
@@ -79,8 +84,15 @@ export function HtmlEditor({
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 space-y-2 border-b border-zinc-800 px-4 py-3">
         <p className="text-[10.5px] leading-relaxed text-zinc-500">
-          HTML e CSS liberi: qualsiasi layout. Gli script vengono rimossi per sicurezza, tutto il
-          resto resta come lo scrivi.
+          HTML e CSS liberi: qualsiasi layout. Gli script vengono rimossi; restano i dati
+          strutturati JSON-LD, che Google legge.
+        </p>
+        <p className="text-[10.5px] leading-relaxed text-zinc-500">
+          Per raccogliere contatti basta un modulo con{" "}
+          <code className="text-zinc-300">
+            {'action="/api/leads/form" method="post" data-novapage-lead'}
+          </code>{" "}
+          e una casella <code className="text-zinc-300">{'name="consent"'}</code>.
         </p>
         <div className="flex items-center gap-2">
           <button
@@ -95,7 +107,7 @@ export function HtmlEditor({
             <button
               type="button"
               onClick={() => {
-                setDraft("");
+                update("");
                 const next = { ...site };
                 delete next.html;
                 onChange(next);
@@ -114,7 +126,7 @@ export function HtmlEditor({
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <textarea
           value={draft}
-          onChange={(e) => setDraft(e.target.value.slice(0, MAX_HTML))}
+          onChange={(e) => update(e.target.value.slice(0, MAX_HTML))}
           spellCheck={false}
           placeholder={'<style>\n  :root { --accento: #8b5cf6; }\n</style>\n\n<section class="hero">\n  <h1>Il nome della tua attività</h1>\n</section>'}
           className="h-64 w-full resize-y rounded-lg bg-zinc-950 p-3 font-mono text-[11.5px] leading-relaxed text-zinc-200 outline-none ring-1 ring-zinc-800 focus:ring-violet-500"
@@ -126,6 +138,12 @@ export function HtmlEditor({
             La pagina è tua: nessuno la controlla prima che vada online. Questa lista è quello che
             un&apos;attività deve sistemare per essere in regola.
           </p>
+          {site.legalAck?.at && (
+            <p className="mt-1 text-[10.5px] text-amber-200/60">
+              Responsabilità accettata il {site.legalAck.at.slice(0, 10)} (avviso {site.legalAck.notice}),
+              con privacy, cookie e termini generati per questa pagina.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}

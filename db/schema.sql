@@ -38,8 +38,16 @@ create table if not exists leads (
   message    text not null default '',
   read       boolean not null default false,
   consent_at timestamptz,
+  handled    boolean not null default false,
+  notes      text not null default '',
+  replied_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Colonne aggiunte dopo la prima versione: vanno garantite anche sui database in uso.
+alter table leads add column if not exists handled boolean not null default false;
+alter table leads add column if not exists notes text not null default '';
+alter table leads add column if not exists replied_at timestamptz;
 
 create index if not exists leads_site_idx on leads(site_id, created_at desc);
 
@@ -91,6 +99,31 @@ create table if not exists password_resets (
 );
 
 create index if not exists password_resets_user_idx on password_resets(user_id);
+
+-- Cronologia: uno snapshot della configurazione prima di ogni modifica.
+create table if not exists site_versions (
+  id         text primary key,
+  site_id    text not null references sites(id) on delete cascade,
+  config     jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists site_versions_site_idx on site_versions(site_id, created_at desc);
+
+-- Consumo dell'assistente: token per richiesta, per misurare il costo reale.
+create table if not exists ai_usage (
+  id            bigserial primary key,
+  user_id       text references users(id) on delete cascade,
+  site_id       text,
+  provider      text not null,
+  model         text not null,
+  prompt_tokens int not null default 0,
+  output_tokens int not null default 0,
+  cached_tokens int not null default 0,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists ai_usage_user_idx on ai_usage(user_id, created_at desc);
 
 create table if not exists error_logs (
   id         bigserial primary key,

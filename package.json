@@ -13,12 +13,14 @@
     "smoke:ai": "node scripts/ai-smoke.mjs",
     "db:prune": "node --env-file=.env.local scripts/prune.mjs",
     "check:env": "node --env-file=.env.production.local scripts/check-env.mjs",
-    "seo:audit": "node scripts/seo-audit.mjs"
+    "seo:audit": "node scripts/seo-audit.mjs",
+    "check:visual": "node scripts/visual-check.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
     "@vercel/blob": "^2.8.2",
     "next": "16.4.3",
+    "parse5": "^7.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -29,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "puppeteer-core": "^23.11.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.12"

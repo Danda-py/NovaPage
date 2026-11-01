@@ -37,6 +37,11 @@ export function SiteSettings({
       setState("error");
       return;
     }
+    // Il server normalizza il link (minuscole, trattini, suffisso se già in uso):
+    // mostriamo quello reale, altrimenti il campo sembra accettare altro.
+    const data = await res.json().catch(() => ({}));
+    if (typeof data.site?.slug === "string") setValue(data.site.slug);
+    if (typeof data.site?.config?.meta?.title === "string") setName(data.site.config.meta.title);
     setState("saved");
     router.refresh();
   }
@@ -73,9 +78,22 @@ export function SiteSettings({
       <div className="space-y-1.5">
         <label className="block text-[11px] uppercase tracking-wider text-zinc-500">Link pubblico</label>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">/s/</span>
-          <input value={value} onChange={(e) => setValue(e.target.value)} className={input} />
+          <span className="shrink-0 text-xs text-zinc-500">/s/</span>
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className={input}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="nome-pagina"
+            aria-describedby="slug-help"
+          />
         </div>
+        <p id="slug-help" className="text-[11px] text-zinc-500">
+          Lettere minuscole, numeri e trattini. Cambiandolo, il link vecchio smette di funzionare.
+        </p>
       </div>
 
       <div className="flex items-center gap-3">
@@ -98,7 +116,7 @@ export function SiteSettings({
           <p className="text-[11px] leading-relaxed text-zinc-500">
             {isPublished
               ? "Visibile a chi ha il link ed elencata nella sitemap."
-              : "Il link pubblico risponde 404 e la pagina non entra in sitemap."}
+              : "Il link pubblico mostra la pagina 404 e non entra in sitemap."}
           </p>
         </div>
         <button

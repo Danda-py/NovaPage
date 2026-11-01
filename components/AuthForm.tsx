@@ -80,15 +80,15 @@ export function AuthForm({ next }: { next: string }) {
             type="checkbox"
             checked={accept}
             onChange={(e) => setAccept(e.target.checked)}
-            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-violet-500"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-violet-500"
           />
           <span>
             Accetto i{" "}
-            <a href="/termini" target="_blank" className="text-violet-400 hover:underline">
+            <a href="/termini" className="text-violet-400 underline underline-offset-2 hover:text-violet-300">
               Termini di servizio
             </a>{" "}
-            e ho letto l&apos;{" "}
-            <a href="/privacy" target="_blank" className="text-violet-400 hover:underline">
+            e ho letto l&apos;
+            <a href="/privacy" className="text-violet-400 underline underline-offset-2 hover:text-violet-300">
               informativa privacy
             </a>
             .
