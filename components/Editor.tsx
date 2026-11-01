@@ -11,7 +11,7 @@ import { Brand } from "@/components/Brand";
 import { ManualEditor } from "@/components/ManualEditor";
 import { HtmlEditor } from "@/components/HtmlEditor";
 import { PageSettings } from "@/components/PageSettings";
-import { CustomPage } from "@/components/CustomPage";
+import { ScopedHtml } from "@/components/ScopedHtml";
 import { isHtmlPage, sanitizeHtml } from "@/lib/html";
 
 const SUGGESTIONS = [
@@ -41,13 +41,25 @@ export function Editor({
   initialSite,
   slug,
   initialMessages,
+  restorableMessageIds,
 }: {
   siteId: string;
   initialSite: Site;
   slug: string;
   initialMessages: ChatMessage[];
+  /** Messaggi con una fotografia della pagina (ultimi cinque turni). */
+  restorableMessageIds: string[];
 }) {
   const [site, setSite] = useState<Site>(initialSite);
+  const [restorable, setRestorable] = useState<string[]>(restorableMessageIds);
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  // Cronologia locale: annulla/ripeti lavorano sulla stessa sequenza di stati che
+  // chat ed editor manuale alimentano, senza chiedere al server.
+  const historyRef = useRef<Site[]>([initialSite]);
+  const cursorRef = useRef(0);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -147,6 +159,67 @@ export function Editor({
     if (fileInput.current) fileInput.current.value = "";
   }
 
+  /** Ogni stato distinto entra in cronologia una volta sola. */
+  function applySite(next: Site) {
+    setSite(next);
+    const current = historyRef.current[cursorRef.current];
+    if (current && JSON.stringify(current) === JSON.stringify(next)) return;
+    historyRef.current = [...historyRef.current.slice(0, cursorRef.current + 1), next].slice(-40);
+    cursorRef.current = historyRef.current.length - 1;
+    setCanUndo(cursorRef.current > 0);
+    setCanRedo(false);
+  }
+
+  function undo() {
+    if (cursorRef.current <= 0) return;
+    cursorRef.current -= 1;
+    setSite(historyRef.current[cursorRef.current]);
+    setCanUndo(cursorRef.current > 0);
+    setCanRedo(true);
+  }
+
+  function redo() {
+    if (cursorRef.current >= historyRef.current.length - 1) return;
+    cursorRef.current += 1;
+    setSite(historyRef.current[cursorRef.current]);
+    setCanUndo(true);
+    setCanRedo(cursorRef.current < historyRef.current.length - 1);
+  }
+
+  async function saveNow() {
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    await persist(site);
+  }
+
+  /** Torna alla pagina com'era subito dopo un messaggio della chat. */
+  async function restore(messageId: string) {
+    if (restoring) return;
+    setRestoring(messageId);
+    setNotice("");
+    try {
+      const res = await fetch(`/api/sites/${siteId}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(data.error ?? "Ripristino non riuscito");
+        return;
+      }
+      if (data.site) applySite(data.site as Site);
+      setSave("saved");
+      setNotice("Pagina ripristinata a quel messaggio.");
+    } catch {
+      setNotice("Connessione assente: il ripristino non è partito.");
+    } finally {
+      setRestoring(null);
+    }
+  }
+
   /**
    * La chat legge lo stato dal database: le modifiche manuali ancora in coda
    * devono arrivare prima della richiesta, altrimenti la risposta dell'IA
@@ -224,8 +297,12 @@ export function Editor({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Errore");
-      if (data.site) setSite(data.site as Site);
+      if (data.site) applySite(data.site as Site);
       if (Array.isArray(data.messages)) setMessages(data.messages as ChatMessage[]);
+      // Il turno appena fatto è ripristinabile subito, senza ricaricare la pagina.
+      if (typeof data.restorePoint === "string") {
+        setRestorable((prev) => [data.restorePoint, ...prev.filter((x) => x !== data.restorePoint)].slice(0, 5));
+      }
       setSave("saved");
     } catch (e) {
       setSave("error");
@@ -288,6 +365,17 @@ export function Editor({
                   onSubmit={(values) => submitAnswers(m, values)}
                 />
               )}
+              {restorable.includes(m.id) && (
+                <button
+                  type="button"
+                  onClick={() => restore(m.id)}
+                  disabled={restoring !== null}
+                  className="mt-1.5 inline-flex min-h-8 items-center gap-1 rounded-lg border border-zinc-800 px-2 text-[10.5px] text-zinc-400 hover:border-violet-600/60 hover:text-violet-300 disabled:opacity-40"
+                >
+                  <span aria-hidden>↺</span>
+                  {restoring === m.id ? "Ripristino…" : "Ripristina a questo messaggio"}
+                </button>
+              )}
             </div>
           ),
         )}
@@ -310,6 +398,15 @@ export function Editor({
       {uploadError && (
         <p role="alert" className="px-3 pt-1.5 text-[11px] text-red-400">
           {uploadError}
+        </p>
+      )}
+
+      {notice && (
+        <p className="flex items-center justify-between gap-2 px-3 pt-1.5 text-[11px] text-emerald-400">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice("")} aria-label="Chiudi avviso" className="text-zinc-500 hover:text-zinc-300">
+            ×
+          </button>
         </p>
       )}
 
@@ -390,30 +487,59 @@ export function Editor({
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-950 text-zinc-100">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 px-3 sm:gap-3 sm:px-4">
+      <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-zinc-800 px-2.5 sm:gap-3 sm:px-4">
         <Brand showName={false} />
         <Link
           href="/dashboard"
           aria-label="Torna ai miei siti"
-          className="inline-flex min-h-9 shrink-0 items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+          className="inline-flex h-9 min-w-8 shrink-0 items-center justify-center gap-1 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 sm:justify-start"
         >
           <span aria-hidden>←</span>
           <span className="hidden sm:inline">I miei siti</span>
         </Link>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{site.meta.title}</span>
-        {/* Lo stato del salvataggio serve anche da telefono: prima era nascosto
-            sotto la soglia sm, quindi non si sapeva se le modifiche erano salvate. */}
-        {save !== "idle" && (
-          <span className="flex shrink-0 items-center gap-1.5 text-[10.5px] text-zinc-500" aria-live="polite">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{site.meta.title}</span>
+        {/* Annulla, ripeti e salva stanno in alto a destra, sempre visibili:
+            da telefono il pulsante è anche lo stato del salvataggio. */}
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            aria-label="Annulla l'ultima modifica"
+            title="Annulla"
+            className="inline-flex h-9 w-8 items-center justify-center rounded-lg border border-zinc-800 text-[15px] leading-none text-zinc-300 hover:border-zinc-600 disabled:opacity-30"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            aria-label="Ripeti la modifica annullata"
+            title="Ripeti"
+            className="inline-flex h-9 w-8 items-center justify-center rounded-lg border border-zinc-800 text-[15px] leading-none text-zinc-300 hover:border-zinc-600 disabled:opacity-30"
+          >
+            ↷
+          </button>
+          <button
+            type="button"
+            onClick={saveNow}
+            aria-label="Salva la pagina"
+            title="Salva"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-700 px-2 text-[11px] font-medium text-zinc-200 hover:border-violet-500/70 hover:text-violet-200 sm:px-2.5"
+          >
             <span
               aria-hidden
               className={`h-1.5 w-1.5 rounded-full ${
                 save === "error" ? "bg-red-400" : save === "saved" ? "bg-emerald-400" : "bg-amber-400"
               }`}
             />
-            {save === "saving" ? "Salvo…" : save === "saved" ? "Salvato" : "Non salvato"}
+            <span className="px-0.5 text-[10px] sm:px-0 sm:text-[11px]">Salva</span>
+          </button>
+          <span className="sr-only" aria-live="polite">
+            {save === "saving" ? "Salvataggio in corso" : save === "saved" ? "Modifiche salvate" : save === "error" ? "Modifiche non salvate" : ""}
           </span>
-        )}
+        </div>
         <Link
           href={`/sites/${siteId}`}
           aria-label="Statistiche della pagina"
@@ -424,7 +550,7 @@ export function Editor({
         <Link
           href={`/s/${slug}`}
           target="_blank"
-          className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-zinc-800 px-2.5 text-xs font-medium text-zinc-100 hover:bg-zinc-700"
+          className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-zinc-800 px-2 text-xs font-medium text-zinc-100 hover:bg-zinc-700 sm:px-2.5"
         >
           Apri
         </Link>
@@ -446,12 +572,14 @@ export function Editor({
         </div>
       )}
 
-      <div className="flex border-b border-zinc-800 md:hidden">
+      <div className="flex shrink-0 border-b border-zinc-800 md:hidden">
         {(["chat", "edit", "html", "settings", "preview"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`min-h-11 flex-1 text-[13px] font-medium ${tab === t ? "text-violet-400" : "text-zinc-500"}`}
+            className={`min-h-11 min-w-0 flex-1 whitespace-nowrap px-0.5 text-[11.5px] font-medium sm:text-[13px] ${
+              tab === t ? "text-violet-400" : "text-zinc-500"
+            }`}
           >
             {t === "chat"
               ? "Chat"
@@ -490,16 +618,16 @@ export function Editor({
           <div className={`${tab === "edit" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
             <ManualEditor
               site={site}
-              onChange={setSite}
+              onChange={applySite}
               openId={selectedBlock}
               onOpenChange={setSelectedBlock}
             />
           </div>
           <div className={`${tab === "html" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
-            <HtmlEditor site={site} onChange={setSite} />
+            <HtmlEditor site={site} onChange={applySite} />
           </div>
           <div className={`${tab === "settings" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
-            <PageSettings site={site} onChange={setSite} />
+            <PageSettings site={site} onChange={applySite} />
           </div>
         </div>
         <div className={`${tab === "preview" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto md:block`}>
@@ -507,7 +635,7 @@ export function Editor({
             <FontLoader theme={site.theme} />
             <div className="min-h-full overflow-hidden bg-zinc-950 md:rounded-[2.25rem] md:border md:border-zinc-800 md:shadow-2xl">
               {isHtmlPage(site) ? (
-                <CustomPage html={sanitizeHtml(site.html!)} siteId={siteId} trackViews={false} />
+                <ScopedHtml html={sanitizeHtml(site.html!)} />
               ) : (
                 <SitePreview
                   site={site}

@@ -42,9 +42,13 @@ export function NewSite() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500"
+        aria-label="Crea nuova landing"
+        className="inline-flex min-h-9 items-center rounded-xl bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-500 sm:px-4 sm:py-2"
       >
-        + Crea nuova landing
+        <span className="sm:hidden" aria-hidden>
+          +
+        </span>
+        <span className="hidden sm:inline">+ Crea nuova landing</span>
       </button>
     );
   }
@@ -52,7 +56,7 @@ export function NewSite() {
   return (
     <form
       onSubmit={create}
-      className="absolute right-5 top-16 z-20 w-[min(92vw,20rem)] space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl"
+      className="absolute right-3 top-[6.25rem] z-30 w-[min(92vw,20rem)] space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl sm:right-5 sm:top-16"
     >
       <div>
         <label className="block text-[10.5px] uppercase tracking-wider text-zinc-500">

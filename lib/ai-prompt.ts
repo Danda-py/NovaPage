@@ -29,6 +29,7 @@ TESTI
 
 DATI CHE NON SONO LINK
 - Password Wi-Fi, codici, check-in/out, regole e numeri utili vanno nel blocco info come righe {label, value}. Mai testi o codici nel campo url: solo URL https reali, mai javascript: o data:.
+- Il pulsante Copia di una riga info è la proprietà copy: mettila a true quando l'utente chiede di copiare quel valore ("tasto copia sulla password Wi-Fi") e rimettila a false quando chiede di toglierlo. Non è un blocco nuovo: aggiorna la riga con set_block.
 
 SETTORI
 - Identifica l'attività e usa solo le sezioni che servono. B&B/casa vacanze: hero, info (Wi-Fi, check-in/out, regole), gallery, links, form. Bar/ristorante: banner, catalog come menù, hours, links (menù PDF, mappa, WhatsApp). Negozio/reseller: catalog con prezzi, banner per i drop, links social, hours, contact. Creator/servizi: links social, gallery, catalog servizi, form per preventivi.

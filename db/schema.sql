@@ -132,6 +132,11 @@ create table if not exists site_versions (
 );
 
 create index if not exists site_versions_site_idx on site_versions(site_id, created_at desc);
+-- Punto di ripristino legato a un messaggio della chat: torna alla pagina
+-- esattamente com'era subito dopo quel turno.
+alter table site_versions add column if not exists message_id text;
+create index if not exists site_versions_message_idx on site_versions(site_id, message_id)
+  where message_id is not null;
 
 -- Consumo dell'assistente: token per richiesta, per misurare il costo reale.
 create table if not exists ai_usage (

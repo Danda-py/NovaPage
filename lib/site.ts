@@ -67,7 +67,12 @@ export type Product = {
 
 export type HoursRow = { day: string; time: string };
 
-export type InfoRow = { label: string; value: string };
+export type InfoRow = {
+  label: string;
+  value: string;
+  /** Mostra il pulsante "Copia" accanto al valore (password Wi-Fi, codici). */
+  copy?: boolean;
+};
 
 export type BlockLayout = "grid" | "carousel" | "list";
 
@@ -448,7 +453,12 @@ function normalizeData(raw: unknown): BlockData {
     out.rows = d.rows
       .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
       .slice(0, 12)
-      .map((r) => ({ label: str(r.label) ?? "", value: str(r.value) ?? "" }))
+      .map((r) => {
+        const row: InfoRow = { label: str(r.label) ?? "", value: str(r.value) ?? "" };
+        // Solo un true esplicito: un valore mancante resta senza pulsante.
+        if (r.copy === true) row.copy = true;
+        return row;
+      })
       .filter((r) => r.label && r.value);
   }
   if (typeof d.layout === "string" && BLOCK_LAYOUTS.includes(d.layout as BlockLayout)) {

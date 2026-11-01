@@ -100,7 +100,7 @@ const features = [
     text: "Moduli che salvano i lead e statistiche su visite e clic dei pulsanti.",
   },
   {
-    title: "Nove stili, zero template uguali",
+    title: "Quindici stili, zero template uguali",
     text: "Aurora, neon, editoriale, luxury, glass, minimal, brutal, carta, mono, tramonto, bosco, cromato, pastello, riso, blueprint: e se non bastano, costruisci il tuo.",
   },
 ];
@@ -159,7 +159,9 @@ export default function Landing() {
           __html: jsonLdScript(homeJsonLd({ baseUrl: siteUrl(), faq: FAQ })),
         }}
       />
-      <header className="sticky top-0 z-20 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur">
+      {/* Sfondo pieno: semi-trasparente le righe della pagina si vedevano passare
+          sotto la testata mentre si scorreva. */}
+      <header className="sticky top-0 z-20 border-b border-zinc-900 bg-zinc-950">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
           <Brand />
           <nav aria-label="Sezioni della pagina" className="hidden items-center gap-5 text-sm text-zinc-400 sm:flex">
@@ -187,7 +189,7 @@ export default function Landing() {
             }}
             aria-hidden
           />
-          <div className="relative mx-auto grid max-w-6xl gap-14 px-5 pb-20 pt-16 lg:grid-cols-2 lg:items-center lg:gap-10 lg:pt-24">
+          <div className="relative mx-auto grid max-w-6xl gap-10 px-5 pb-14 pt-10 sm:gap-14 sm:pb-20 sm:pt-16 lg:grid-cols-2 lg:items-center lg:gap-10 lg:pt-24">
             <div>
               <span className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-violet-300">
                 Beta aperta
@@ -231,15 +233,15 @@ export default function Landing() {
           </div>
         </section>
 
-        <section id="funzioni" className="border-t border-zinc-900">
-          <div className="mx-auto max-w-6xl px-5 py-20">
+        <section id="funzioni" className="scroll-mt-16 border-t border-zinc-900">
+          <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20">
             <h2 className="max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
               Tutto quello che serve, niente da configurare
             </h2>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-400">
-              Sei blocchi, sei stili, un solo modo di lavorare: dire cosa vuoi.
+              Nove blocchi, quindici stili, un solo modo di lavorare: dire cosa vuoi.
             </p>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-2 lg:grid-cols-3">
               {features.map((f) => (
                 <div
                   key={f.title}
@@ -253,10 +255,10 @@ export default function Landing() {
           </div>
         </section>
 
-        <section id="come" className="border-t border-zinc-900 bg-zinc-900/20">
-          <div className="mx-auto max-w-6xl px-5 py-20">
+        <section id="come" className="scroll-mt-16 border-t border-zinc-900 bg-zinc-900/20">
+          <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Come funziona</h2>
-            <div className="mt-10 grid gap-6 sm:grid-cols-3">
+            <div className="mt-8 grid gap-6 sm:mt-10 sm:grid-cols-3">
               {steps.map((s) => (
                 <div key={s.n}>
                   <span className="text-[11px] font-semibold tracking-[0.24em] text-violet-400">{s.n}</span>
@@ -268,10 +270,10 @@ export default function Landing() {
           </div>
         </section>
 
-        <section id="per-chi" className="border-t border-zinc-900">
-          <div className="mx-auto max-w-6xl px-5 py-20">
+        <section id="per-chi" className="scroll-mt-16 border-t border-zinc-900">
+          <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Per chi è pensata</h2>
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
+            <div className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-3">
               {audiences.map((a) => (
                 <div key={a.title} className="rounded-2xl border border-zinc-800 p-5">
                   <h3 className="text-sm font-semibold">{a.title}</h3>
@@ -282,8 +284,8 @@ export default function Landing() {
           </div>
         </section>
 
-        <section id="domande" className="border-t border-zinc-900 bg-zinc-900/20">
-          <div className="mx-auto max-w-3xl px-5 py-20">
+        <section id="domande" className="scroll-mt-16 border-t border-zinc-900 bg-zinc-900/20">
+          <div className="mx-auto max-w-3xl px-5 py-14 sm:py-20">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Domande frequenti</h2>
             <div className="mt-8 divide-y divide-zinc-800 border-y border-zinc-800">
               {FAQ.map((item) => (
@@ -297,8 +299,8 @@ export default function Landing() {
         </section>
 
         <section className="border-t border-zinc-900">
-          <div className="mx-auto max-w-3xl px-5 py-20 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">La tua pagina è a una frase di distanza</h2>
+          <div className="mx-auto max-w-3xl px-5 py-14 text-center sm:py-20">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">La tua pagina è a una frase di distanza</h2>
             <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
               Apri l&apos;app, racconta cosa fai e guarda la pagina prendere forma. Se non ti piace,
               lo dici e cambia.

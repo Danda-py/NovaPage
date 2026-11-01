@@ -36,35 +36,53 @@ export default async function Dashboard() {
     .filter((entry) => entry.missing.length > 0)
     .slice(0, 3);
 
+  // La navigazione sta in due posti: nella testata da tablet in su, in una riga
+  // dedicata su telefono. Una sola definizione, così non divergono mai.
+  const navLinks = (
+    <>
+      <Link
+        href="/leads"
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs text-zinc-400 hover:text-zinc-100"
+      >
+        Contatti
+        {unreadTotal > 0 && (
+          <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
+            {unreadTotal}
+          </span>
+        )}
+      </Link>
+      <Link
+        href="/account"
+        className="inline-flex min-h-9 items-center rounded-lg px-2 text-xs text-zinc-400 hover:text-zinc-100"
+      >
+        Account
+      </Link>
+      <LogoutButton />
+    </>
+  );
+
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
-      <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-5 backdrop-blur">
-        <Brand />
-        <div className="flex items-center gap-3">
-          <span className="hidden max-w-[180px] truncate text-xs text-zinc-500 lg:block">{user.email}</span>
-          <Link
-            href="/leads"
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs text-zinc-400 hover:text-zinc-100"
-          >
-            Contatti
-            {unreadTotal > 0 && (
-              <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
-                {unreadTotal}
-              </span>
-            )}
-          </Link>
-          <Link
-            href="/account"
-            className="inline-flex min-h-9 items-center rounded-lg px-2 text-xs text-zinc-400 hover:text-zinc-100"
-          >
-            Account
-          </Link>
-          <LogoutButton />
-          <NewSite />
+      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-5">
+          <Brand />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <span className="hidden max-w-[180px] truncate text-xs text-zinc-500 lg:block">
+              {user.email}
+            </span>
+            <div className="hidden items-center gap-1 sm:flex">{navLinks}</div>
+            <NewSite />
+          </div>
         </div>
+        <nav
+          aria-label="Le tue sezioni"
+          className="flex items-center gap-1 border-t border-zinc-900 px-3 pb-1 sm:hidden"
+        >
+          {navLinks}
+        </nav>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-5">
         <h1 className="text-2xl font-semibold tracking-tight">I miei siti</h1>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
           <span>

@@ -8,6 +8,7 @@ import {
   getSite,
   logError,
   recordAiUsage,
+  saveMessageVersion,
   setChatAnswers,
   updateSite,
 } from "@/lib/store";
@@ -153,6 +154,11 @@ const BLOCK_DATA_SCHEMA = {
         properties: {
           label: { type: "STRING", description: "Es. Password Wi-Fi" },
           value: { type: "STRING", description: "Es. Aurora2026" },
+          copy: {
+            type: "BOOLEAN",
+            description:
+              "true solo se l'utente vuole il pulsante Copia accanto a questo valore (es. 'metti un tasto copia sulla password Wi-Fi'); false o assente per toglierlo.",
+          },
         },
         required: ["label", "value"],
       },
@@ -561,7 +567,16 @@ export async function POST(req: Request) {
           { role: "user", text: message || "Ho caricato delle foto.", images },
           { role: "assistant", text: fallback, ask: ask ?? undefined },
         ]);
-        return NextResponse.json({ site, reply: fallback, calls, ask, messages });
+        const saved = messages[messages.length - 1]?.id ?? null;
+        if (saved) await saveMessageVersion(siteId, site, saved);
+        return NextResponse.json({
+          site,
+          reply: fallback,
+          calls,
+          ask,
+          messages,
+          restorePoint: saved,
+        });
       }
       await logError({
         source: "chat",
@@ -711,5 +726,16 @@ export async function POST(req: Request) {
     { role: "assistant", text: finalReply, ask: ask ?? undefined },
   ]);
 
-  return NextResponse.json({ site, reply: finalReply, calls, ask, messages });
+  // Punto di ripristino del turno: la pagina com'è adesso. L'id del messaggio è
+  // ciò che l'utente vede in chat, quindi il tasto "Ripristina" sta lì.
+  let restorePoint: string | null = null;
+  if (changed) {
+    const assistantMessageId = messages[messages.length - 1]?.id;
+    if (assistantMessageId) {
+      await saveMessageVersion(siteId, site, assistantMessageId);
+      restorePoint = assistantMessageId;
+    }
+  }
+
+  return NextResponse.json({ site, reply: finalReply, calls, ask, messages, restorePoint });
 }

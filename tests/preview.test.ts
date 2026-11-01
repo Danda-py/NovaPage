@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SitePreview } from "@/components/SitePreview";
-import type { Site } from "@/lib/site";
+import { normalizeSite, type Site } from "@/lib/site";
 
 const site: Site = {
   meta: { title: "Prova", description: "Prova" },
@@ -47,11 +47,58 @@ describe("blocco informazioni", () => {
     ],
   };
 
-  it("mostra la password senza pulsante di copia", () => {
+  it("senza il flag non mostra nessun pulsante di copia", () => {
     const html = renderToStaticMarkup(createElement(SitePreview, { site: infoSite }));
     expect(html).toContain("Aurora2026");
     expect(html).toContain("Password Wi-Fi");
     expect(html).not.toContain(">Copia<");
     expect(html).not.toContain("Copiato");
+  });
+
+  it("con copy: true mostra il pulsante, solo su quella riga", () => {
+    const withCopy: Site = {
+      ...infoSite,
+      blocks: [
+        {
+          id: "i1",
+          type: "info",
+          data: {
+            title: "Informazioni utili",
+            rows: [
+              { label: "Password Wi-Fi", value: "Aurora2026", copy: true },
+              { label: "Check-in", value: "dalle 15:00" },
+            ],
+          },
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(createElement(SitePreview, { site: withCopy }));
+    expect(html).toContain(">Copia<");
+    expect(html).toContain('aria-label="Copia Password Wi-Fi"');
+    expect(html).not.toContain('aria-label="Copia Check-in"');
+  });
+
+  it("il flag sopravvive al salvataggio e resta solo se è true", () => {
+    const normalized = normalizeSite({
+      ...infoSite,
+      blocks: [
+        {
+          id: "i1",
+          type: "info",
+          data: {
+            rows: [
+              { label: "Password Wi-Fi", value: "Aurora2026", copy: true },
+              { label: "Check-in", value: "15:00", copy: "sì" },
+            ],
+          },
+        },
+      ],
+    });
+    expect(normalized?.blocks[0]?.data.rows?.[0]).toEqual({
+      label: "Password Wi-Fi",
+      value: "Aurora2026",
+      copy: true,
+    });
+    expect(normalized?.blocks[0]?.data.rows?.[1]).toEqual({ label: "Check-in", value: "15:00" });
   });
 });

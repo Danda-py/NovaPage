@@ -492,6 +492,52 @@ export async function saveVersion(siteId: string, config: Site): Promise<void> {
   }
 }
 
+/**
+ * Punto di ripristino di un turno di chat: la pagina com'è subito *dopo* quel
+ * messaggio. Restare dentro 5 voci significa poter tornare indietro di cinque
+ * richieste senza dover leggere una cronologia di date.
+ */
+export async function saveMessageVersion(
+  siteId: string,
+  config: Site,
+  messageId: string,
+): Promise<void> {
+  try {
+    const sql = db();
+    await sql`
+      insert into site_versions (id, site_id, config, message_id)
+      values (${id("ver")}, ${siteId}, ${JSON.stringify(config)}::jsonb, ${messageId})
+    `;
+  } catch {
+    // Migrazione non applicata: la chat funziona, si perde solo il ripristino.
+  }
+}
+
+/** Gli ultimi messaggi con una fotografia della pagina, dal più recente. */
+export async function listRestorableMessages(siteId: string, limit = 5): Promise<string[]> {
+  try {
+    const sql = db();
+    const rows = (await sql`
+      select message_id from site_versions
+      where site_id = ${siteId} and message_id is not null
+      order by created_at desc limit ${limit}
+    `) as Array<{ message_id: string }>;
+    return rows.map((row) => row.message_id);
+  } catch {
+    return [];
+  }
+}
+
+export async function getVersionByMessage(siteId: string, messageId: string): Promise<Site | null> {
+  const sql = db();
+  const rows = (await sql`
+    select config from site_versions
+    where site_id = ${siteId} and message_id = ${messageId}
+    order by created_at desc limit 1
+  `) as Array<{ config: Site }>;
+  return rows[0]?.config ?? null;
+}
+
 export async function listVersions(siteId: string): Promise<SiteVersion[]> {
   try {
     const sql = db();

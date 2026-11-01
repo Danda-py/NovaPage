@@ -627,29 +627,51 @@ function BlockFields({
         <div className="space-y-2">
           <span className={label}>Righe</span>
           {rows.map((row, index) => (
-            <div key={index} className="flex items-center gap-1.5">
-              <Field
-                value={row.label}
-                onChange={(value) =>
-                  onChange({ rows: rows.map((r, i) => (i === index ? { ...r, label: value } : r)) })
-                }
-                placeholder="Etichetta"
-              />
-              <Field
-                value={row.value}
-                onChange={(value) =>
-                  onChange({ rows: rows.map((r, i) => (i === index ? { ...r, value } : r)) })
-                }
-                placeholder="Valore"
-              />
-              <button
-                type="button"
-                onClick={() => onChange({ rows: rows.filter((_, i) => i !== index) })}
-                className="px-1 text-[11px] text-zinc-600 hover:text-red-400"
-                aria-label="Elimina riga"
-              >
-                ✕
-              </button>
+            <div key={index} className="space-y-1 rounded-lg border border-zinc-800 p-2">
+              <div className="flex items-center gap-1.5">
+                <Field
+                  value={row.label}
+                  onChange={(value) =>
+                    onChange({ rows: rows.map((r, i) => (i === index ? { ...r, label: value } : r)) })
+                  }
+                  placeholder="Etichetta"
+                />
+                <Field
+                  value={row.value}
+                  onChange={(value) =>
+                    onChange({ rows: rows.map((r, i) => (i === index ? { ...r, value: value } : r)) })
+                  }
+                  placeholder="Valore"
+                />
+                <button
+                  type="button"
+                  onClick={() => onChange({ rows: rows.filter((_, i) => i !== index) })}
+                  className="px-1 text-[11px] text-zinc-600 hover:text-red-400"
+                  aria-label="Elimina riga"
+                >
+                  ✕
+                </button>
+              </div>
+              {/* Anche la chat può accenderlo: qui si vede e si cambia a mano. */}
+              <label className="flex cursor-pointer items-center gap-1.5 text-[10.5px] text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={row.copy === true}
+                  onChange={(e) =>
+                    onChange({
+                      rows: rows.map((r, i) =>
+                        i === index
+                          ? e.target.checked
+                            ? { ...r, copy: true }
+                            : { label: r.label, value: r.value }
+                          : r,
+                      ),
+                    })
+                  }
+                  className="h-3.5 w-3.5 shrink-0 accent-violet-500"
+                />
+                Tasto copia accanto al valore
+              </label>
             </div>
           ))}
           <button
