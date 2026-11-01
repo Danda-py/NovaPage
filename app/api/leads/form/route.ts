@@ -16,7 +16,9 @@ import { encodeLeadCookie, LEAD_COOKIE, parseLeadSubmission } from "@/lib/lead-f
 export async function POST(req: Request) {
   const form = await req.formData().catch(() => null);
   const get = (key: string) => String(form?.get(key) ?? "").trim();
-  const slug = get("slug").slice(0, 60);
+  // Lo slug torna nel redirect: solo la forma che generiamo noi, mai percorsi liberi.
+  const rawSlug = get("slug").slice(0, 60);
+  const slug = /^[a-z0-9][a-z0-9-]*$/i.test(rawSlug) ? rawSlug : "";
 
   const back = (state: string, keepValues: boolean, values = "") => {
     const target = slug ? `/s/${slug}?contatto=${state}` : "/";

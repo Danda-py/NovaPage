@@ -445,7 +445,7 @@ function BlockView({
           return (
             <a
               key={i}
-              href={isUsableUrl(b.url) ? b.url : undefined}
+              href={b.url}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between gap-3 py-3.5 text-[13.5px] font-medium"

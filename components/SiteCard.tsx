@@ -11,6 +11,7 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [error, setError] = useState("");
   const clicks = Object.values(site.stats.clicks).reduce((a, b) => a + b, 0);
 
   async function copy() {
@@ -36,6 +37,8 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
       router.push(`/editor/${data.site.id}`);
       return;
     }
+    // Senza questo il piano gratuito "duplicava" e non succedeva niente.
+    setError(typeof data.error === "string" ? data.error : "Duplicazione non riuscita: riprova.");
     setDuplicating(false);
   }
 
@@ -43,8 +46,12 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
     if (!window.confirm(`Eliminare "${site.config.meta.title}"? L'operazione è definitiva.`)) return;
     setDeleting(true);
     const res = await fetch(`/api/sites/${site.id}`, { method: "DELETE" });
-    if (res.ok) router.refresh();
-    else setDeleting(false);
+    if (res.ok) {
+      router.refresh();
+      return;
+    }
+    setError("Eliminazione non riuscita: riprova.");
+    setDeleting(false);
   }
 
   return (
@@ -80,6 +87,8 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
           <span>{leads} contatti</span>
           {unread > 0 && <span className="font-medium text-violet-300">{unread} nuovi</span>}
         </div>
+
+        {error && <p className="text-[11.5px] leading-relaxed text-red-400">{error}</p>}
 
         <div className="flex flex-wrap gap-2">
           <Link

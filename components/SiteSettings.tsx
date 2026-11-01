@@ -32,8 +32,9 @@ export function SiteSettings({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: name.trim(), slug: value.trim() }),
-    });
-    if (!res.ok) {
+    }).catch(() => null);
+    // Senza il catch la rete assente lasciava il bottone su "…" per sempre.
+    if (!res || !res.ok) {
       setState("error");
       return;
     }
@@ -54,8 +55,8 @@ export function SiteSettings({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ published: target }),
-    });
-    if (res.ok) {
+    }).catch(() => null);
+    if (res?.ok) {
       setToggleError("");
       setIsPublished(target);
       router.refresh();

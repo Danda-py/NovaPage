@@ -38,12 +38,17 @@ export function LeadActions({
     "w-full rounded-lg bg-zinc-950 px-3 py-2 text-[13px] outline-none ring-1 ring-zinc-800 focus:ring-violet-500";
 
   async function patch(payload: Record<string, unknown>) {
-    const res = await fetch("/api/leads", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteId, leadId, ...payload }),
-    });
-    return res.ok;
+    try {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId, leadId, ...payload }),
+      });
+      return res.ok;
+    } catch {
+      // Rete assente: senza questo la promise resta appesa e il bottone "…" per sempre.
+      return false;
+    }
   }
 
   async function toggleHandled() {
@@ -52,7 +57,10 @@ export function LeadActions({
     const target = !isHandled;
     if (await patch({ handled: target })) {
       setIsHandled(target);
+      setError("");
       router.refresh();
+    } else {
+      setError("Aggiornamento non riuscito: riprova.");
     }
     setBusy(false);
   }
@@ -63,6 +71,7 @@ export function LeadActions({
     const ok = await patch({ notes: note });
     setSavingNote(false);
     setNoteSaved(ok);
+    setError(ok ? "" : "Nota non salvata: riprova.");
     if (ok) router.refresh();
   }
 
@@ -75,7 +84,12 @@ export function LeadActions({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ siteId, leadId, subject, text }),
-    });
+    }).catch(() => null);
+    if (!res) {
+      setSending(false);
+      setError("Connessione assente: la risposta non è partita.");
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     setSending(false);
     if (!res.ok) {

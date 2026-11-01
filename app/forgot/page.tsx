@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Brand } from "@/components/Brand";
+import { safeFetch } from "@/lib/http";
 
 export default function ForgotPage() {
   const [email, setEmail] = useState("");
@@ -14,11 +15,16 @@ export default function ForgotPage() {
     if (state === "busy") return;
     setState("busy");
     setError("");
-    const res = await fetch("/api/auth/forgot", {
+    const res = await safeFetch("/api/auth/forgot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setState("idle");
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Qualcosa è andato storto");

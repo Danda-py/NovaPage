@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { safeFetch } from "@/lib/http";
 
 export function ChangeEmail({ email }: { email: string }) {
   const router = useRouter();
@@ -16,11 +17,16 @@ export function ChangeEmail({ email }: { email: string }) {
     if (busy) return;
     setBusy(true);
     setError("");
-    const res = await fetch("/api/account/email", {
+    const res = await safeFetch("/api/account/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: next, password }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setBusy(false);
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {

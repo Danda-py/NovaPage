@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Ask, AskField } from "@/lib/site";
+import { safeFetch } from "@/lib/http";
 
 type Props = {
   ask: Ask;
@@ -52,7 +53,8 @@ export function AskForm({ ask, answered, answers, disabled, onSubmit }: Props) {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const res = await safeFetch("/api/upload", { method: "POST", body: fd });
+      if (!res) throw new Error("Connessione assente: riprova con la rete attiva.");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Caricamento non riuscito");
       set(key, data.url);

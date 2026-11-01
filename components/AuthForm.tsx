@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { safeFetch } from "@/lib/http";
 
 export function AuthForm({ next }: { next: string }) {
   const router = useRouter();
@@ -21,11 +22,16 @@ export function AuthForm({ next }: { next: string }) {
     }
     setBusy(true);
     setError("");
-    const res = await fetch(`/api/auth/${mode}`, {
+    const res = await safeFetch(`/api/auth/${mode}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, acceptTerms: accept }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setBusy(false);
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Qualcosa è andato storto");

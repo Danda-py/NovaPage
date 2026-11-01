@@ -5,10 +5,11 @@ import { neon } from "@neondatabase/serverless";
  * è l'unico modo per rispondere 404 davvero (dopo lo shell la risposta è già 200).
  *
  * Per non pagare una query a ogni visualizzazione teniamo in memoria, per
- * istanza, l'esito degli ultimi minuti. Le landing cambiano raramente e uno slug
- * appena pubblicato compare entro un minuto.
+ * istanza, l'esito per pochi secondi. La finestra è volutamente corta: se una
+ * pagina passa a bozza, finché il proxy la considera pubblicata la richiesta
+ * arriva alla pagina, che risponde con il contenuto 404 ma con stato 200.
  */
-const TTL = 60_000;
+const TTL = 15_000;
 const MAX = 500;
 
 const cache = new Map<string, { exists: boolean; at: number }>();

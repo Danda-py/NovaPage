@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SITE_TEMPLATES, type SiteTemplateId } from "@/lib/site";
+import { safeFetch } from "@/lib/http";
 
 export function NewSite() {
   const router = useRouter();
@@ -17,11 +18,16 @@ export function NewSite() {
     if (creating) return;
     setCreating(true);
     setError("");
-    const res = await fetch("/api/sites", {
+    const res = await safeFetch("/api/sites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: title.trim() || "La mia pagina", template }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setCreating(false);
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.site?.id) {
       router.push(`/editor/${data.site.id}`);

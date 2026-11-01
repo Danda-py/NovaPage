@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Ask, Site } from "@/lib/site";
 import type { ChatMessage } from "@/lib/store";
 import { SitePreview } from "@/components/SitePreview";
@@ -72,6 +72,40 @@ export function Editor({
     setSupportsVoice(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
   }, []);
 
+  const savingRef = useRef(false);
+  const pendingRef = useRef<Site | null>(null);
+
+  /**
+   * Una sola PATCH alla volta: due salvataggi che si rincorrono possono arrivare
+   * fuori ordine e far vincere sul server la versione più vecchia. Se arriva una
+   * modifica mentre si salva, resta in coda e parte appena la precedente chiude.
+   */
+  const persist = useCallback(
+    async (next: Site) => {
+      if (savingRef.current) {
+        pendingRef.current = next;
+        return;
+      }
+      savingRef.current = true;
+      try {
+        const res = await fetch(`/api/sites/${siteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: next }),
+        });
+        setSave(res.ok ? "saved" : "error");
+      } catch {
+        setSave("error");
+      } finally {
+        savingRef.current = false;
+        const queued = pendingRef.current;
+        pendingRef.current = null;
+        if (queued) void persist(queued);
+      }
+    },
+    [siteId],
+  );
+
   // Autosalvataggio: chat ed editor manuale scrivono lo stesso JSON, con debounce.
   useEffect(() => {
     if (firstRender.current) {
@@ -80,23 +114,15 @@ export function Editor({
     }
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSave("saving");
-    saveTimer.current = window.setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/sites/${siteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ config: site }),
-        });
-        setSave(res.ok ? "saved" : "error");
-      } catch {
-        setSave("error");
-      }
-    }, 700);
+    saveTimer.current = window.setTimeout(() => void persist(site), 700);
 
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [site, siteId]);
+  }, [site, siteId, persist]);
+
+  // Il microfono non deve restare acceso se l'utente chiude l'editor.
+  useEffect(() => () => recognition.current?.stop(), []);
 
   async function uploadFiles(files: FileList | null) {
     if (!files?.length) return;

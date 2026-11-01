@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { safeFetch } from "@/lib/http";
 
 export function DeleteAccount() {
   const router = useRouter();
@@ -20,11 +21,16 @@ export function DeleteAccount() {
     }
     setBusy(true);
     setError("");
-    const res = await fetch("/api/account", {
+    const res = await safeFetch("/api/account", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setBusy(false);
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Cancellazione non riuscita");

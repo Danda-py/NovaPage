@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { safeFetch } from "@/lib/http";
 import {
   BLOCK_LAYOUTS,
   BUTTON_ICONS,
@@ -87,12 +88,16 @@ function ImageField({
     const body = new FormData();
     body.append("file", f);
     try {
-      const res = await fetch("/api/upload", { method: "POST", body });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) {
-        onError(data.error ?? "Caricamento non riuscito");
+      const res = await safeFetch("/api/upload", { method: "POST", body });
+      if (!res) {
+        onError("Connessione assente: l'immagine non è stata caricata.");
       } else {
-        onChange(data.url);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) {
+          onError(data.error ?? "Caricamento non riuscito");
+        } else {
+          onChange(data.url);
+        }
       }
     } catch {
       onError("Caricamento non riuscito");

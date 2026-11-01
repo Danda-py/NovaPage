@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SiteVersion } from "@/lib/store";
+import { safeFetch } from "@/lib/http";
 
 function when(iso: string): string {
   const date = new Date(iso);
@@ -28,11 +29,16 @@ export function VersionHistory({
     if (busy) return;
     setBusy(versionId);
     setError("");
-    const res = await fetch(`/api/sites/${siteId}/versions`, {
+    const res = await safeFetch(`/api/sites/${siteId}/versions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ versionId }),
     });
+    if (!res) {
+      setError("Connessione assente: il ripristino non è partito.");
+      setBusy(null);
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? "Ripristino non riuscito");

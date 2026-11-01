@@ -99,7 +99,7 @@ export default async function LeadsPage({
             <p className="text-sm text-zinc-400">
               {onlyUnread ? "Nessun contatto da leggere." : "Non hai ancora ricevuto contatti."}
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-zinc-400">
               Aggiungi un blocco modulo alla landing: ogni invio arriva qui.
             </p>
           </div>
@@ -155,7 +155,8 @@ export default async function LeadsPage({
                       </a>
                     )}
                     {lead.phone && (
-                      <a href={`tel:${lead.phone}`} className="hover:underline">
+                      // Un `tel:` con spazi o testo libero non compone: si tengono solo cifre e +.
+                      <a href={`tel:${lead.phone.replace(/[^\d+]/g, "")}`} className="hover:underline">
                         {lead.phone}
                       </a>
                     )}

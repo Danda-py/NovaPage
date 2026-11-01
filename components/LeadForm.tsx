@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { safeFetch } from "@/lib/http";
 
 type Props = {
   siteId?: string;
@@ -63,11 +64,16 @@ export function LeadForm({
     }
     setError("");
     setState("sending");
-    const res = await fetch("/api/leads", {
+    const res = await safeFetch("/api/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ siteId, ...values, website: honeypot, consent, startedAt }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova tra un momento.");
+      setState("idle");
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? "Invio non riuscito, riprova");

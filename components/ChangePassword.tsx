@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { safeFetch } from "@/lib/http";
 
 export function ChangePassword() {
   const router = useRouter();
@@ -35,11 +36,16 @@ export function ChangePassword() {
     }
     setBusy(true);
     setError("");
-    const res = await fetch("/api/account/password", {
+    const res = await safeFetch("/api/account/password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ current, next }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setBusy(false);
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {

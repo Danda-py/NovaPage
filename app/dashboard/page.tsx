@@ -144,7 +144,7 @@ export default async function Dashboard() {
         )}
 
         <section className="mt-12 flex flex-col gap-3 border-t border-zinc-900 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[11.5px] leading-relaxed text-zinc-600">
+          <p className="text-[11.5px] leading-relaxed text-zinc-400">
             I dati restano tuoi: email, password, export e cancellazione dell&apos;account sono nelle
             impostazioni.
           </p>

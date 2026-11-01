@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { safeFetch } from "@/lib/http";
 
 const field =
   "w-full rounded-xl bg-zinc-950 px-3.5 py-3 text-sm outline-none ring-1 ring-zinc-800 focus:ring-violet-500";
@@ -25,11 +26,16 @@ export function ResetForm({ token }: { token: string }) {
     }
     setState("busy");
     setError("");
-    const res = await fetch("/api/auth/reset", {
+    const res = await safeFetch("/api/auth/reset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
+    if (!res) {
+      setError("Connessione assente: riprova.");
+      setState("idle");
+      return;
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Link non valido o scaduto");
