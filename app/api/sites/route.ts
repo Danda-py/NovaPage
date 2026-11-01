@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { countSites, createSite, duplicateSite, listSites } from "@/lib/store";
+import { createSite, duplicateSite, listSites } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
-import { PLANS, siteLimitReached } from "@/lib/plans";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -18,21 +17,6 @@ export async function POST(req: Request) {
     duplicateOf?: string;
     template?: string;
   } | null;
-
-  // Il limite è del piano, non del client: la dashboard può mostrare altro, qui si blocca.
-  const used = await countSites(user.id);
-  if (siteLimitReached(user.plan, used)) {
-    return NextResponse.json(
-      {
-        error:
-          user.plan === "free"
-            ? `Il piano ${PLANS.free.label} include ${PLANS.free.sites} landing: per crearne un'altra serve il piano ${PLANS.pro.label}.`
-            : "Limite di landing raggiunto",
-        plan: user.plan,
-      },
-      { status: 403 },
-    );
-  }
 
   if (typeof body?.duplicateOf === "string" && body.duplicateOf) {
     const copy = await duplicateSite(body.duplicateOf, user.id);

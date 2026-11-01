@@ -1,5 +1,4 @@
 import { db } from "./db";
-import { planOf, type Plan } from "./plans";
 import { newId, SITE_TEMPLATES, templateConfig, type Ask, type Site } from "./site";
 
 export type ChatMessage = {
@@ -19,7 +18,6 @@ export type User = {
   salt: string;
   sessionVersion: number;
   termsAcceptedAt: string | null;
-  plan: Plan;
   createdAt: string;
 };
 
@@ -141,7 +139,6 @@ type UserRow = {
   salt: string;
   session_version: number;
   terms_accepted_at: string | Date | null;
-  plan: string | null;
   created_at: string | Date;
 };
 
@@ -197,7 +194,6 @@ const mapUser = (row: UserRow): User => ({
   salt: row.salt,
   sessionVersion: row.session_version ?? 0,
   termsAcceptedAt: row.terms_accepted_at ? iso(row.terms_accepted_at) : null,
-  plan: planOf(row.plan),
   createdAt: iso(row.created_at),
 });
 
@@ -243,14 +239,6 @@ export async function listSites(ownerId: string): Promise<StoredSite[]> {
     ownerId,
   ])) as SiteRow[];
   return rows.map(mapSite);
-}
-
-export async function countSites(ownerId: string): Promise<number> {
-  const sql = db();
-  const rows = (await sql`
-    select count(*)::int as n from sites where owner_id = ${ownerId}
-  `) as Array<{ n: number }>;
-  return rows[0]?.n ?? 0;
 }
 
 export async function getSite(siteId: string): Promise<StoredSite | null> {

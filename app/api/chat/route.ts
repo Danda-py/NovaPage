@@ -17,7 +17,6 @@ import { colorDirective } from "@/lib/colors";
 import { htmlOutline, validateHtml } from "@/lib/html";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
 import { riskyMarkup } from "@/lib/moderation";
-import { planSpec } from "@/lib/plans";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import {
@@ -648,11 +647,6 @@ export async function POST(req: Request) {
     texts.push(
       "La pagina conteneva un modulo che raccoglie password o dati di pagamento e non l'ho applicata: userei un link al tuo sistema di pagamento.",
     );
-  }
-
-  // Il badge si toglie solo con il piano che lo prevede, anche se lo chiede l'IA.
-  if (site.hideBadge && !planSpec(user.plan).hideBadge) {
-    site = { ...site, hideBadge: undefined };
   }
 
   site = withLegalAck(record.config, site, {

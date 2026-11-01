@@ -4,7 +4,6 @@ import { deleteSite, updateSite } from "@/lib/store";
 import { requireSite } from "@/lib/guard";
 import { normalizeSite, withLegalAck, type Site } from "@/lib/site";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
-import { planSpec } from "@/lib/plans";
 import { riskyMarkup } from "@/lib/moderation";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -50,11 +49,6 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
     const blocked = riskyMarkup(normalized.html ?? "");
     if (blocked) return NextResponse.json({ error: blocked }, { status: 422 });
-
-    // Badge rimovibile solo dove il piano lo prevede: il client non decide.
-    if (normalized.hideBadge && !planSpec(guard.user.plan).hideBadge) {
-      delete normalized.hideBadge;
-    }
 
     config = withLegalAck(guard.site.config, normalized, {
       ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
