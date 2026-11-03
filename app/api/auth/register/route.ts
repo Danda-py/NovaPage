@@ -17,8 +17,8 @@ export async function POST(req: Request) {
     password?: string;
     acceptTerms?: boolean;
   } | null;
-  const email = body?.email?.trim().toLowerCase() ?? "";
-  const password = body?.password ?? "";
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
 
   if (body?.acceptTerms !== true) {
     return NextResponse.json(

@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   const site = await createSite(
     user.id,
-    body?.title ?? "La mia pagina",
+    typeof body?.title === "string" ? body.title : "La mia pagina",
     typeof body?.template === "string" ? body.template : undefined,
   );
   return NextResponse.json({ site }, { status: 201 });

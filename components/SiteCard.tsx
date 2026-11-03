@@ -13,9 +13,13 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
   const [duplicating, setDuplicating] = useState(false);
   const [error, setError] = useState("");
   const clicks = Object.values(site.stats.clicks).reduce((a, b) => a + b, 0);
+  const publicDomain = site.domainVerified ? site.customDomain : undefined;
+  const publicHref = publicDomain ? `https://${publicDomain}` : `/s/${site.slug}`;
 
   async function copy() {
-    const url = `${window.location.origin}/s/${site.slug}`;
+    const url = publicDomain
+      ? `https://${publicDomain}`
+      : `${window.location.origin}/s/${site.slug}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -78,7 +82,7 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
               </span>
             )}
           </h2>
-          <p className="truncate text-xs text-zinc-500">/s/{site.slug}</p>
+          <p className="truncate text-xs text-zinc-500">{publicDomain ?? `/s/${site.slug}`}</p>
         </div>
 
         <div className="flex flex-wrap gap-4 text-[11px] text-zinc-400">
@@ -103,6 +107,14 @@ export function SiteCard({ site, leads, unread = 0 }: { site: StoredSite; leads:
           >
             {copied ? "Copiato ✓" : "Copia link"}
           </button>
+          <a
+            href={publicHref}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-zinc-500"
+          >
+            Apri
+          </a>
           <button
             onClick={duplicate}
             disabled={duplicating}

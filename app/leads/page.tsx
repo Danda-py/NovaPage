@@ -3,7 +3,12 @@ export const metadata = { title: "Contatti", robots: { index: false, follow: fal
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { listLeadsForOwner, listSites } from "@/lib/store";
+import {
+  leadCountsForOwner,
+  listLeadsForOwner,
+  listSites,
+  type LeadFilter,
+} from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 import { Brand } from "@/components/Brand";
 import { DeleteLead } from "@/components/DeleteLead";
@@ -15,23 +20,46 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
 }
 
+const PER_PAGE = 25;
+
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filtro?: string }>;
+  searchParams: Promise<{ filtro?: string; pagina?: string }>;
 }) {
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const { filtro } = await searchParams;
-  const onlyUnread = filtro === "nuovi";
+  const { filtro, pagina } = await searchParams;
+  const filter: LeadFilter =
+    filtro === "nuovi" ? "unread" : filtro === "da-gestire" ? "pending" : "all";
+  const onlyUnread = filter === "unread";
 
-  const [sites, allLeads] = await Promise.all([listSites(user.id), listLeadsForOwner(user.id)]);
+  const [sites, counts] = await Promise.all([
+    listSites(user.id),
+    leadCountsForOwner(user.id),
+  ]);
   const titles = new Map(sites.map((site) => [site.id, site]));
-  const unread = allLeads.filter((lead) => !lead.read).length;
-  const pending = allLeads.filter((lead) => !lead.handled).length;
-  const leads = onlyUnread ? allLeads.filter((lead) => !lead.read) : allLeads;
+  const { total, unread, pending } = counts;
+  const filteredTotal = filter === "unread" ? unread : filter === "pending" ? pending : total;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PER_PAGE));
+  const requestedPage = Number.parseInt(pagina ?? "1", 10);
+  const currentPage = Math.min(
+    totalPages,
+    Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1),
+  );
+  const leads = await listLeadsForOwner(user.id, {
+    limit: PER_PAGE,
+    offset: (currentPage - 1) * PER_PAGE,
+    filter,
+  });
+  const pageHref = (target: number) => {
+    const base =
+      filter === "unread" ? "/leads?filtro=nuovi" : filter === "pending" ? "/leads?filtro=da-gestire" : "/leads";
+    if (target <= 1) return base;
+    return `${base}${base.includes("?") ? "&" : "?"}pagina=${target}`;
+  };
 
   const tab = (label: string, href: string, active: boolean, count?: number) => (
     <Link
@@ -72,12 +100,12 @@ export default async function LeadsPage({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Contatti ricevuti</h1>
             <p className="mt-1 text-sm text-zinc-500">
-              {allLeads.length} totali · {unread} da leggere · {pending} da gestire, da tutte le tue
+              {total} totali · {unread} da leggere · {pending} da gestire, da tutte le tue
               landing page.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {allLeads.length > 0 && (
+            {total > 0 && (
               <a
                 href="/api/leads/export"
                 className="inline-flex min-h-9 items-center rounded-lg border border-zinc-700 px-3 text-[11px] font-medium text-zinc-300 hover:border-zinc-500"
@@ -90,14 +118,19 @@ export default async function LeadsPage({
         </div>
 
         <nav aria-label="Filtra i contatti" className="mt-5 flex flex-wrap items-center gap-1">
-          {tab("Tutti", "/leads", !onlyUnread, allLeads.length)}
+          {tab("Tutti", "/leads", filter === "all", total)}
           {tab("Da leggere", "/leads?filtro=nuovi", onlyUnread, unread)}
+          {tab("Da gestire", "/leads?filtro=da-gestire", filter === "pending", pending)}
         </nav>
 
         {leads.length === 0 ? (
           <div className="mt-6 rounded-2xl border border-dashed border-zinc-800 px-6 py-16 text-center">
             <p className="text-sm text-zinc-400">
-              {onlyUnread ? "Nessun contatto da leggere." : "Non hai ancora ricevuto contatti."}
+              {filter === "unread"
+                ? "Nessun contatto da leggere."
+                : filter === "pending"
+                  ? "Nessun contatto da gestire."
+                  : "Non hai ancora ricevuto contatti."}
             </p>
             <p className="mt-1 text-xs text-zinc-400">
               Aggiungi un blocco modulo alla landing: ogni invio arriva qui.
@@ -181,6 +214,37 @@ export default async function LeadsPage({
               );
             })}
           </ul>
+        )}
+
+        {totalPages > 1 && (
+          <nav
+            aria-label="Pagine dei contatti"
+            className="mt-5 flex items-center justify-between gap-3 text-[11.5px] text-zinc-400"
+          >
+            {currentPage > 1 ? (
+              <Link
+                href={pageHref(currentPage - 1)}
+                className="inline-flex min-h-9 items-center rounded-lg border border-zinc-700 px-3 hover:border-zinc-500"
+              >
+                ← Precedenti
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span>
+              Pagina {currentPage} di {totalPages} · {filteredTotal} contatti
+            </span>
+            {currentPage < totalPages ? (
+              <Link
+                href={pageHref(currentPage + 1)}
+                className="inline-flex min-h-9 items-center rounded-lg border border-zinc-700 px-3 hover:border-zinc-500"
+              >
+                Successivi →
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
         )}
       </main>
     </div>

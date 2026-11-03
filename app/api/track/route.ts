@@ -17,7 +17,11 @@ function visitFingerprint(req: Request): string {
  * I crawler non sono visite: senza questo filtro i numeri delle statistiche
  * raccontano i bot di Google e i monitor di uptime, non i clienti.
  */
-const BOT = /bot|crawl|spider|slurp|headless|preview|lighthouse|monitor|uptime|facebookexternalhit|whatsapp|telegram|slack/i;
+// `WhatsApp`, `Telegram` e `Slack` compaiono anche nei browser in-app di persone
+// reali: escluderli falsava le statistiche proprio per chi arriva da un link
+// condiviso. Restano fuori solo crawler e anteprime social.
+const BOT =
+  /bot|crawl|spider|slurp|headless|preview|lighthouse|monitor|uptime|facebookexternalhit|discordbot|linkedinbot|pinterest/i;
 
 function isBot(req: Request): boolean {
   const ua = req.headers.get("user-agent") ?? "";
@@ -27,18 +31,22 @@ function isBot(req: Request): boolean {
 export async function POST(req: Request) {
   if (isBot(req)) return NextResponse.json({ ok: true });
 
-  const limit = await rateLimit(`track:${clientIp(req)}`, 120, 60 * 1000);
-  if (!limit.ok) return NextResponse.json({ ok: true });
-
   const body = (await req.json().catch(() => null)) as {
     siteId?: string;
     label?: string;
   } | null;
-  if (!body?.siteId) return NextResponse.json({ error: "siteId mancante" }, { status: 400 });
+  const siteId = typeof body?.siteId === "string" ? body.siteId : "";
+  if (!siteId) return NextResponse.json({ error: "siteId mancante" }, { status: 400 });
 
-  const ok = body.label
-    ? await trackClick(body.siteId, body.label)
-    : await trackView(body.siteId, visitFingerprint(req));
+  // Il limite è per sito oltre che per IP: una raffica non deve gonfiare le
+  // statistiche di tutte le pagine contemporaneamente.
+  const limit = await rateLimit(`track:${clientIp(req)}:${siteId}`, 60, 60 * 1000);
+  if (!limit.ok) return NextResponse.json({ ok: true });
+
+  const label = typeof body?.label === "string" ? body.label : "";
+  const ok = label
+    ? await trackClick(siteId, label)
+    : await trackView(siteId, visitFingerprint(req));
   if (!ok) return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

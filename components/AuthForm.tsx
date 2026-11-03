@@ -1,20 +1,35 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { safeFetch } from "@/lib/http";
 
 export function AuthForm({ next }: { next: string }) {
-  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [accept, setAccept] = useState(false);
+  // Sessione aperta: si resta su un pannello di passaggio finché la dashboard non
+  // ha dipinto qualcosa, invece di lasciare il vuoto (schermo nero) durante il
+  // caricamento del documento successivo.
+  const [entering, setEntering] = useState(false);
   // Dopo la password corretta, un account con 2FA riceve un biglietto a vita breve.
   const [ticket, setTicket] = useState("");
   const [code, setCode] = useState("");
+
+  /**
+   * Il cookie di sessione è appena stato impostato dalla risposta: una navigazione
+   * completa (non client) lo porta con sé alla prima richiesta della dashboard.
+   */
+  function enter() {
+    setEntering(true);
+    setBusy(false);
+    // Due frame: il pannello viene dipinto prima che parta la navigazione.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => window.location.replace(next)),
+    );
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,8 +53,7 @@ export function AuthForm({ next }: { next: string }) {
         setBusy(false);
         return;
       }
-      router.replace(next);
-      router.refresh();
+      enter();
       return;
     }
     if (mode === "register" && !accept) {
@@ -69,12 +83,32 @@ export function AuthForm({ next }: { next: string }) {
       setBusy(false);
       return;
     }
-    router.replace(next);
-    router.refresh();
+    enter();
   }
 
   const field =
     "w-full rounded-xl bg-zinc-950 px-3.5 py-3 text-sm outline-none ring-1 ring-zinc-800 focus:ring-violet-500";
+
+  if (entering) {
+    return (
+      <div role="status" aria-live="polite" className="space-y-3 text-center">
+        <p className="flex items-center justify-center gap-2 text-sm text-zinc-200">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" />
+          Accesso eseguito, sto aprendo il tuo spazio…
+        </p>
+        <p className="text-[11.5px] leading-relaxed text-zinc-500">
+          Se la pagina resta ferma, {" "}
+          <a
+            href={next}
+            className="text-violet-300 underline underline-offset-2 hover:text-violet-200"
+          >
+            tocca qui per entrare
+          </a>
+          .
+        </p>
+      </div>
+    );
+  }
 
   if (ticket) {
     return (

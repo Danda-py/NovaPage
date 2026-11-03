@@ -86,6 +86,15 @@ node --env-file=.env.local scripts/migrate-v6.mjs
 # chiave Gemini personale dell'account (cifrata)
 node --env-file=.env.local scripts/migrate-v7.mjs
 
+# punti di ripristino legati ai messaggi della chat
+node --env-file=.env.local scripts/migrate-v8.mjs
+
+# domini personalizzati (colonne e indici)
+node --env-file=.env.local scripts/migrate-v9.mjs
+
+# cambio email con link di conferma
+node --env-file=.env.local scripts/migrate-v10.mjs
+
 # controllo che un database in uso abbia tutte le colonne richieste
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/verify.sql
 
@@ -100,14 +109,15 @@ node --env-file=.env.local scripts/seed-demo.mjs
 ```
 
 Retenzione dati (da schedulare con un cron): log applicativi 90 giorni, analytics 365 giorni,
-token di reset e contatori scaduti.
+contatti 24 mesi dall'ultimo scambio, token di reset e cambio email scaduti, contatori scaduti.
+L'eliminazione di un sito o di un account rimuove anche le immagini caricate nello storage.
 
 ```bash
 npm run db:prune
 ```
 
 Tabelle: `users`, `sites`, `leads`, `chat_messages`, `site_views`, `site_events`, `rate_limits`,
-`password_resets`, `error_logs`.
+`password_resets`, `email_changes`, `site_versions`, `ai_usage`, `error_logs`.
 
 ## Comandi
 
@@ -149,8 +159,9 @@ Va lanciato a mano o in una job notturna, non a ogni commit. La CI
 - **Contatti**: ogni nuovo messaggio arriva anche via email al titolare (con `RESEND_API_KEY` e
   `EMAIL_FROM` configurate); dalla pagina statistiche si esportano in CSV, con escape delle formule,
   e si eliminano singolarmente.
-- **Password**: si cambia anche dalla dashboard senza passare dall'email; le sessioni aperte sugli
-  altri dispositivi vengono disconnesse (la sessione corrente viene rinnovata).
+- **Password ed email**: la password si cambia dalla dashboard; le altre sessioni vengono
+  disconnesse. Un nuovo indirizzo email resta in attesa finché non si apre il link inviato lì
+  (valido un'ora, una volta sola); dopo la conferma tutte le sessioni vengono disconnesse.
 - **Rate limit**: contatori in Postgres (`rate_limits`), quindi validi anche con più istanze
   serverless. Limiti su login, registrazione, reset, caricamento immagini, chat (40/ora), contatti
   (10/ora per sito e IP).
@@ -163,16 +174,22 @@ Va lanciato a mano o in una job notturna, non a ogni commit. La CI
   compilati. Il titolare può eliminare un singolo contatto dalla pagina statistiche.
 - **Prezzi in sconto**: le schede prodotto accettano `compareAtPrice` e `lowestPrice30`; se c'è uno
   sconto la pagina mostra anche il prezzo minimo dei 30 giorni precedenti (direttiva Omnibus).
-- **Sessioni**: firmate HMAC e versionate; cambiare password disconnette le sessioni esistenti. Le
-  password sono hashate con scrypt asincrono.
+- **Sessioni**: firmate HMAC e versionate; cambiare password, email o verifica in due passaggi
+  disconnette le sessioni esistenti (quella corrente viene rinnovata). Le password sono hashate con
+  scrypt asincrono.
 - **Immagini**: senza `BLOB_READ_WRITE_TOKEN` finiscono in `public/uploads` (solo sviluppo locale).
-  Su serverless non sono persistenti.
+  Su serverless non sono persistenti. La chat accetta sia i percorsi locali sia gli URL Blob
+  restituiti dallo storage; l'eliminazione di sito o account cancella anche le varianti caricate.
 - **Errori**: gli errori non gestiti finiscono in `error_logs` tramite `instrumentation.ts`, con
   confini di errore dedicati (`app/error.tsx`, `app/global-error.tsx`).
 - **HTML libero**: una landing può essere a blocchi oppure in HTML/CSS libero (`Site.html`), scritto dall'IA con `write_html` o incollato nella scheda HTML dell'editor. È reso inline nella pagina pubblica, non in un iframe, quindi resta indicizzabile. Gli script vengono rimossi (girerebbero con i cookie dell'app); restano i dati strutturati JSON-LD validi e tutti gli stili. Limite 120.000 caratteri. Nella scheda HTML c'è la lista dei controlli legali (titolare e P.IVA, privacy, cookie, prezzi, diritti su immagini, accessibilità): l'utente è responsabile di ciò che pubblica.
+- **Domini personalizzati**: la proprietà si dimostra solo con il record TXT `_novapage`; solo dopo
+  l'aggancio all'hosting il dominio viene marcato attivo. Le vecchie URL `/s/{slug}` sul dominio del
+  cliente reindirizzano alla radice e non possono mostrare altre pagine.
 - **SEO delle landing**: titolo e descrizione editabili (usati in `<title>`, OG e Twitter),
-  canonical `/s/{slug}`, `robots` con `max-image-preview: large`, immagine OpenGraph 1200×630 generata
-  dal tema della pagina, `theme-color` dallo sfondo, sitemap con `lastModified` e dati strutturati
+  canonical `/s/{slug}` (o il dominio personalizzato quando è attivo), `robots` con
+  `max-image-preview: large`, immagine OpenGraph 1200×630 generata dal tema della pagina,
+  `theme-color` dallo sfondo, sitemap con `lastModified` e dati strutturati
   schema.org (`WebPage`, `BreadcrumbList`, `Organization`/`LocalBusiness`/`Store`, `ItemList` di
   prodotti con prezzo e disponibilità, `sameAs` dei social linkati). Le bozze sono escluse da
   sitemap, rispondono 404 e non vengono indicizzate.

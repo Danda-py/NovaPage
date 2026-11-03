@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { email?: string } | null;
-  const email = body?.email?.trim().toLowerCase() ?? "";
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) return NextResponse.json({ error: "Inserisci la tua email" }, { status: 400 });
 
   // `mode` descrive la configurazione, non l'esistenza dell'account: può quindi

@@ -211,19 +211,19 @@ export default function Landing() {
                 >
                   Crea la tua landing gratis
                 </Link>
-                <Link
-                  href="/s/casa-aurora"
+                <a
+                  href="#esempio"
                   className="rounded-xl border border-zinc-800 px-5 py-3 text-sm font-medium text-zinc-300 hover:border-zinc-600"
                 >
                   Vedi un esempio
-                </Link>
+                </a>
               </div>
               <p className="mt-4 text-xs text-zinc-400">
                 Nessuna carta di credito · online in meno di un minuto
               </p>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[340px]">
+            <div id="esempio" className="relative mx-auto w-full max-w-[340px] scroll-mt-20">
               <div className="overflow-hidden rounded-[2.25rem] border border-zinc-800 bg-zinc-950 shadow-2xl">
                 <div className="h-[592px] overflow-hidden">
                   <SitePreview site={demo} />

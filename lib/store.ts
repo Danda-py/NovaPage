@@ -235,17 +235,16 @@ const SITE_SELECT = `
          coalesce(e.clicks, '{}'::jsonb) as clicks,
          coalesce(e.total_clicks, 0)::int as total_clicks
   from sites s
-  left join (
-    select site_id, count(*)::int as views, count(distinct visitor_id)::int as uniques
-    from site_views group by site_id
-  ) v on v.site_id = s.id
-  left join (
-    select site_id, jsonb_object_agg(label, n) as clicks, sum(n)::int as total_clicks
+  left join lateral (
+    select count(*)::int as views, count(distinct visitor_id)::int as uniques
+    from site_views sv where sv.site_id = s.id
+  ) v on true
+  left join lateral (
+    select jsonb_object_agg(label, n) as clicks, sum(n)::int as total_clicks
     from (
-      select site_id, label, count(*)::int as n from site_events group by site_id, label
+      select label, count(*)::int as n from site_events se where se.site_id = s.id group by label
     ) per_label
-    group by site_id
-  ) e on e.site_id = s.id
+  ) e on true
 `;
 
 async function uniqueSlug(base: string, ignoreId?: string): Promise<string> {
@@ -567,8 +566,23 @@ export async function deleteSite(siteId: string): Promise<boolean> {  const sql 
 
 export async function trackView(siteId: string, visitorId?: string): Promise<boolean> {
   const sql = db();
-  const site = (await sql`select id from sites where id = ${siteId} limit 1`) as Array<{ id: string }>;
+  const site = (await sql`
+    select id from sites where id = ${siteId} and published = true limit 1
+  `) as Array<{ id: string }>;
   if (!site.length) return false;
+
+  // Un refresh non è una visita nuova. L'impronta cambia ogni giorno, quindi il
+  // controllo copre al massimo le ultime 24 ore e non crea uno storico del visitatore.
+  if (visitorId) {
+    const recent = (await sql`
+      select 1 from site_views
+      where site_id = ${siteId} and visitor_id = ${visitorId.slice(0, 80)}
+        and created_at > now() - interval '1 day'
+      limit 1
+    `) as unknown[];
+    if (recent.length) return true;
+  }
+
   await sql`
     insert into site_views (site_id, visitor_id)
     values (${siteId}, ${visitorId ? visitorId.slice(0, 80) : null})
@@ -578,7 +592,9 @@ export async function trackView(siteId: string, visitorId?: string): Promise<boo
 
 export async function trackClick(siteId: string, label: string): Promise<boolean> {
   const sql = db();
-  const site = (await sql`select id from sites where id = ${siteId} limit 1`) as Array<{ id: string }>;
+  const site = (await sql`
+    select id from sites where id = ${siteId} and published = true limit 1
+  `) as Array<{ id: string }>;
   if (!site.length) return false;
   await sql`
     insert into site_events (site_id, label)
@@ -634,16 +650,77 @@ export async function listLeads(siteId: string): Promise<Lead[]> {
   return rows.map(mapLead);
 }
 
-/** Solo i contatti dei siti dell'utente: nessun dato di altri account. */
-export async function listLeadsForOwner(ownerId: string): Promise<Lead[]> {
+export type LeadFilter = "all" | "unread" | "pending";
+
+export type LeadCounts = {
+  total: number;
+  unread: number;
+  pending: number;
+  bySite: Array<{ siteId: string; total: number; unread: number }>;
+};
+
+/**
+ * Solo i contatti dei siti dell'utente: nessun dato di altri account. Il limite
+ * è opzionale (export e dashboard usano il filtro, le pagine lo passano sempre).
+ */
+export async function listLeadsForOwner(
+  ownerId: string,
+  options: { limit?: number; offset?: number; filter?: LeadFilter } = {},
+): Promise<Lead[]> {
   const sql = db();
-  const rows = (await sql`
-    select l.* from leads l
-    join sites s on s.id = l.site_id
-    where s.owner_id = ${ownerId}
-    order by l.created_at desc
-  `) as LeadRow[];
+  const filter =
+    options.filter === "unread"
+      ? "and l.read = false"
+      : options.filter === "pending"
+        ? "and l.handled = false"
+        : "";
+  const limit = options.limit === undefined ? null : Math.min(200, Math.max(1, options.limit));
+  const offset = Math.max(0, options.offset ?? 0);
+
+  const rows = (await sql.query(
+    `select l.* from leads l
+     join sites s on s.id = l.site_id
+     where s.owner_id = $1 ${filter}
+     order by l.created_at desc
+     ${limit === null ? "" : "limit $2 offset $3"}`,
+    limit === null ? [ownerId] : [ownerId, limit, offset],
+  )) as LeadRow[];
   return rows.map(mapLead);
+}
+
+/** Conteggi per la dashboard: nessun contenuto dei contatti, solo numeri. */
+export async function leadCountsForOwner(ownerId: string): Promise<LeadCounts> {
+  const sql = db();
+  const [totalsRows, bySiteRows] = await Promise.all([
+    sql`
+      select count(*)::int as total,
+             count(*) filter (where not l.read)::int as unread,
+             count(*) filter (where not l.handled)::int as pending
+      from leads l join sites s on s.id = l.site_id
+      where s.owner_id = ${ownerId}
+    `,
+    sql`
+      select l.site_id,
+             count(*)::int as total,
+             count(*) filter (where not l.read)::int as unread
+      from leads l join sites s on s.id = l.site_id
+      where s.owner_id = ${ownerId}
+      group by l.site_id
+    `,
+  ]);
+  const totals = totalsRows as unknown as Array<{ total: number; unread: number; pending: number }>;
+  const bySite = bySiteRows as unknown as Array<{
+    site_id: string;
+    total: number;
+    unread: number;
+  }>;
+
+  return {
+    total: totals[0]?.total ?? 0,
+    unread: totals[0]?.unread ?? 0,
+    pending: totals[0]?.pending ?? 0,
+    bySite: bySite.map((row) => ({ siteId: row.site_id, total: row.total, unread: row.unread })),
+  };
 }
 
 export async function deleteLead(siteId: string, leadId: string): Promise<boolean> {
@@ -708,19 +785,21 @@ export async function countUnread(siteId: string): Promise<number> {
 }
 
 /**
- * Verifica che la migrazione v3 (colonna `published`) sia stata applicata.
- * Serve a non pubblicare un deploy che sembra sano ma non può salvare lo stato
- * di pubblicazione né elencare le landing in sitemap.
+ * Verifica le colonne che il codice usa davvero, non solo la prima migrazione:
+ * un deploy con schema vecchio sembra sano finché non si apre la funzione nuova.
  */
 export async function schemaReady(): Promise<boolean> {
   try {
     const sql = db();
     const rows = (await sql`
-      select 1 from information_schema.columns
-      where table_name = 'sites' and column_name = 'published'
-      limit 1
-    `) as unknown[];
-    return rows.length > 0;
+      select count(*)::int as n from information_schema.columns
+      where (table_name = 'sites' and column_name in (
+               'published', 'custom_domain', 'custom_domain_alias',
+               'custom_domain_token', 'custom_domain_verified_at'
+             ))
+         or (table_name = 'email_changes' and column_name in ('token_hash', 'new_email'))
+    `) as Array<{ n: number }>;
+    return (rows[0]?.n ?? 0) >= 7;
   } catch {
     return false;
   }
@@ -846,6 +925,16 @@ export async function updateUserPassword(
   `;
 }
 
+/** Cambiare un fattore di sicurezza invalida tutte le sessioni già emesse. */
+export async function bumpSessionVersion(userId: string): Promise<number> {
+  const sql = db();
+  const rows = (await sql`
+    update users set session_version = session_version + 1
+    where id = ${userId} returning session_version
+  `) as Array<{ session_version: number }>;
+  return rows[0]?.session_version ?? 0;
+}
+
 export type EmailUpdate = "ok" | "taken" | "missing";
 
 /** Cambio email: il vincolo unique è la sola condizione di errore prevedibile. */
@@ -924,6 +1013,33 @@ export async function markAllLeadsReadForOwner(ownerId: string): Promise<number>
 export async function deleteUser(userId: string): Promise<void> {
   const sql = db();
   await sql`delete from users where id = ${userId}`;
+}
+
+/** Cambio email in due passaggi: il nuovo indirizzo resta in attesa fino al clic. */
+export async function createEmailChange(
+  userId: string,
+  newEmail: string,
+  tokenHash: string,
+  expiresAt: Date,
+): Promise<void> {
+  const sql = db();
+  await sql`delete from email_changes where user_id = ${userId} and used_at is null`;
+  await sql`
+    insert into email_changes (token_hash, user_id, new_email, expires_at)
+    values (${tokenHash}, ${userId}, ${newEmail.toLowerCase().trim()}, ${expiresAt})
+  `;
+}
+
+export async function consumeEmailChange(
+  tokenHash: string,
+): Promise<{ userId: string; newEmail: string } | null> {
+  const sql = db();
+  const rows = (await sql`
+    update email_changes set used_at = now()
+    where token_hash = ${tokenHash} and used_at is null and expires_at > now()
+    returning user_id, new_email
+  `) as Array<{ user_id: string; new_email: string }>;
+  return rows[0] ? { userId: rows[0].user_id, newEmail: rows[0].new_email } : null;
 }
 
 export async function createPasswordReset(
@@ -1054,7 +1170,14 @@ export async function logError(input: {
 }
 
 export async function listPublishedSites(): Promise<
-  Array<{ slug: string; title: string; description: string; updatedAt: string }>
+  Array<{
+    slug: string;
+    title: string;
+    description: string;
+    updatedAt: string;
+    customDomain?: string;
+    domainVerified: boolean;
+  }>
 > {
   const sql = db();
   // Estraiamo solo i campi della scheda link: la sitemap non deve caricare i config interi.
@@ -1062,7 +1185,9 @@ export async function listPublishedSites(): Promise<
     select slug,
            config->'meta'->>'title' as title,
            config->'meta'->>'description' as description,
-           updated_at
+           updated_at,
+           custom_domain,
+           custom_domain_verified_at
     from sites
     where published = true
     order by updated_at desc limit 5000
@@ -1071,12 +1196,18 @@ export async function listPublishedSites(): Promise<
     title: string | null;
     description: string | null;
     updated_at: string | Date;
+    custom_domain: string | null;
+    custom_domain_verified_at: string | Date | null;
   }>;
   return rows.map((row) => ({
     slug: row.slug,
     title: row.title ?? row.slug,
     description: row.description ?? "",
     updatedAt: iso(row.updated_at),
+    ...(row.custom_domain && row.custom_domain_verified_at
+      ? { customDomain: row.custom_domain }
+      : null),
+    domainVerified: Boolean(row.custom_domain_verified_at),
   }));
 }
 

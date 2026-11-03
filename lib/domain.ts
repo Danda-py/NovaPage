@@ -105,10 +105,12 @@ export function domainRecords(domain: string, token: string): DomainRecords {
 }
 
 /**
- * Basta il TXT (proprietà) oppure un record di traffico già corretto verso
- * l'hosting. Gli errori DNS sono "non ancora pronto", non un errore dell'utente.
+ * La proprietà del dominio si dimostra solo con il TXT dedicato. Un record A o
+ * CNAME già puntato all'hosting non basta: un dominio ospitato lì in passato
+ * potrebbe essere collegato senza che chi lo richiede ne sia il titolare.
+ * Gli errori DNS sono "non ancora pronto", non un errore dell'utente.
  */
-export async function verifyDomainDns(domain: string, token: string): Promise<boolean> {
+export async function verifyDomainOwnership(domain: string, token: string): Promise<boolean> {
   const records = domainRecords(domain, token);
 
   try {
@@ -118,20 +120,6 @@ export async function verifyDomainDns(domain: string, token: string): Promise<bo
     for (const name of new Set([records.txtName, `_novapage.${domain}`])) {
       const txt = await dns.resolveTxt(name).catch(() => [] as string[][]);
       if (txt.some((chunks) => chunks.join("").includes(records.txtValue))) return true;
-    }
-
-    const cnameTargets = [HOSTING_CNAME_TARGET.toLowerCase(), platformHost()];
-    for (const record of records.dns) {
-      if (record.type === "CNAME") {
-        const cnames = await dns.resolveCname(record.name).catch(() => [] as string[]);
-        const match = cnames.some((target) =>
-          cnameTargets.includes(target.toLowerCase().replace(/\.$/, "")),
-        );
-        if (match) return true;
-      } else {
-        const addresses = await dns.resolve4(record.name).catch(() => [] as string[]);
-        if (addresses.includes(record.value)) return true;
-      }
     }
 
     return false;

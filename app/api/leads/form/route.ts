@@ -4,7 +4,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { emailConfigured, leadNotificationHtml, leadThankYouHtml, sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/site-url";
 import { encodeLeadCookie, LEAD_COOKIE, parseLeadSubmission } from "@/lib/lead-form";
-import { platformHost } from "@/lib/domain";
+import { isPlatformHost, platformHost } from "@/lib/domain";
 
 /**
  * Modulo contatti delle pagine in HTML libero.
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   // serve la pagina alla radice.
   const onPlatform =
     !host ||
-    host === platformHost() ||
+    isPlatformHost(host, platformHost()) ||
     host.endsWith(".vercel.app") ||
     host === "localhost" ||
     host === "127.0.0.1" ||
@@ -78,7 +78,9 @@ export async function POST(req: Request) {
 
   if (emailConfigured()) {
     const siteId = site.id;
-    const pageUrl = `${siteUrl()}/s/${site.slug}`;
+    // Il link nella conferma al visitatore deve restare il suo indirizzo, anche
+    // quando la pagina è servita su un dominio personalizzato.
+    const pageUrl = onPlatform ? `${siteUrl()}/s/${site.slug}` : `https://${host}`;
     const visitorEmail = lead.email;
     after(async () => {
       const owner = await findOwnerContact(siteId);

@@ -1,16 +1,14 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { safeFetch } from "@/lib/http";
 
 export function ChangeEmail({ email }: { email: string }) {
-  const router = useRouter();
   const [next, setNext] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,10 +31,9 @@ export function ChangeEmail({ email }: { email: string }) {
       setError(data.error ?? "Aggiornamento non riuscito");
       return;
     }
-    setDone(true);
+    setDone(typeof data.email === "string" ? data.email : next);
     setNext("");
     setPassword("");
-    router.refresh();
   }
 
   const field =
@@ -67,7 +64,12 @@ export function ChangeEmail({ email }: { email: string }) {
         required
       />
       {error && <p className="text-[12px] text-red-400">{error}</p>}
-      {done && <p className="text-[12px] text-emerald-400">Email aggiornata.</p>}
+      {done && (
+        <p className="text-[12px] leading-relaxed text-emerald-400">
+          Ti abbiamo inviato un link a {done}. L&apos;email resta quella attuale finché non lo
+          confermi.
+        </p>
+      )}
       <button
         type="submit"
         disabled={busy}

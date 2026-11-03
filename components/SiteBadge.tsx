@@ -20,15 +20,3 @@ export function SiteBadge({ href = "/?utm_source=badge&utm_medium=landing" }: { 
     </a>
   );
 }
-
-/** Versione statica per l'anteprima nell'editor: mostra il badge senza copiare il layout. */
-export function SiteBadgePreview() {
-  return (
-    <div className="flex justify-end px-4 pb-4">
-      <span className="inline-flex h-[30px] items-center gap-2 rounded-full border border-white/20 bg-zinc-950/85 px-3 text-[11px] font-medium text-zinc-100 backdrop-blur-md">
-        <span aria-hidden className="h-2 w-2 rotate-45 rounded-[1px] bg-violet-400" />
-        Creato con NovaPage
-      </span>
-    </div>
-  );
-}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { requireSite } from "@/lib/guard";
 import { markSiteDomainVerified } from "@/lib/store";
-import { domainRecords, hostPair, verifyDomainDns } from "@/lib/domain";
+import { domainRecords, hostPair, verifyDomainOwnership } from "@/lib/domain";
 import { attachDomainsToHosting, hostingConfigured } from "@/lib/hosting";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
 
@@ -40,32 +40,50 @@ export async function POST(_req: Request, { params }: Ctx) {
 
   // La proprietà (TXT) si verifica una volta sola; l'aggancio all'hosting si
   // ritenta a ogni clic, così un errore temporaneo dell'API non resta bloccato.
-  const verified =
+  const ownershipVerified =
     site.domainVerified ||
-    (await verifyDomainDns(site.customDomain, site.customDomainToken ?? ""));
-
-  let updated = site;
-  if (verified && !site.domainVerified) {
-    updated = (await markSiteDomainVerified(id)) ?? site;
-    revalidateTag(`site:${site.slug}`, { expire: 0 });
-  }
+    (await verifyDomainOwnership(site.customDomain, site.customDomainToken ?? ""));
 
   let hosted = false;
   let hostingNote = "";
-  if (verified) {
+  let active = site.domainVerified;
+
+  if (ownershipVerified) {
     if (!hostingConfigured()) {
+      // Senza credenziali non possiamo agganciare il dominio: il TXT però è una
+      // prova valida e l'utente non deve poter fare altro da qui.
+      active = true;
       hostingNote =
         "Dominio verificato. Per servirlo manca la configurazione dell'hosting sul server (VERCEL_TOKEN e VERCEL_PROJECT_ID).";
     } else {
       const attach = await attachDomainsToHosting(domainHosts);
       hosted = attach.ok;
+      // Un dominio già verificato resta attivo anche se l'hosting è momentaneamente
+      // irraggiungibile: il fallimento non deve spegnere una pagina che funziona.
+      active = site.domainVerified || attach.ok;
       if (!attach.ok) {
         hostingNote = attach.error
-          ? `Dominio verificato, ma l'hosting non l'ha accettato: ${attach.error}`
-          : "Dominio verificato, ma l'hosting non l'ha ancora registrato.";
+          ? `Proprietà verificata, ma l'hosting non ha accettato il dominio: ${attach.error}`
+          : "Proprietà verificata, ma l'hosting non ha ancora registrato il dominio.";
       }
     }
   }
 
-  return NextResponse.json({ verified, hosted, hostingNote, records, hosts, site: updated });
+  // Solo dopo l'aggancio il dominio diventa attivo nel database: se l'hosting
+  // fallisce non deve risultare verificato e servire una pagina che non esiste.
+  let updated = site;
+  if (active && !site.domainVerified) {
+    updated = (await markSiteDomainVerified(id)) ?? site;
+    revalidateTag(`site:${site.slug}`, { expire: 0 });
+  }
+
+  return NextResponse.json({
+    verified: active,
+    ownershipVerified,
+    hosted,
+    hostingNote,
+    records,
+    hosts,
+    site: updated,
+  });
 }

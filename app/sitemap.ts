@@ -24,14 +24,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/cookie`, changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  // Solo le landing pubblicate: le bozze rispondono 404 e non vanno dichiarate.
+  // Solo le landing pubblicate e senza dominio proprio: quelle su un dominio
+  // personalizzato hanno lì il loro canonico e non devono comparire due volte.
   return [
     ...marketing,
-    ...sites.map((site) => ({
-      url: `${base}/s/${site.slug}`,
-      lastModified: new Date(site.updatedAt),
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    })),
+    ...sites
+      .filter((site) => !(site.domainVerified && site.customDomain))
+      .map((site) => ({
+        url: `${base}/s/${site.slug}`,
+        lastModified: new Date(site.updatedAt),
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+      })),
   ];
 }

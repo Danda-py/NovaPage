@@ -5,6 +5,8 @@ import { requireSite } from "@/lib/guard";
 import { normalizeSite, withLegalAck, type Site } from "@/lib/site";
 import { sanitizeHtmlStrict } from "@/lib/html-strict";
 import { riskyMarkup } from "@/lib/moderation";
+import { collectImageUrls } from "@/lib/images";
+import { deleteStoredImages } from "@/lib/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -58,6 +60,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   // La disponibilità si verifica prima del salvataggio: il suffisso automatico
   // della creazione qui confonderebbe (l'utente scrive un link e ne ottiene un altro).
+  if (body.slug !== undefined && typeof body.slug !== "string") {
+    return NextResponse.json({ error: "Indirizzo non valido" }, { status: 400 });
+  }
   if (typeof body.slug === "string") {
     const requested = slugify(body.slug);
     if (!(await isSlugAvailable(requested, id))) {
@@ -93,6 +98,9 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     );
   }
   await deleteSite(id);
+  // Le immagini caricate non hanno un legame nel database: senza questa pulizia
+  // restano nello storage (e vengono fatturate) per sempre.
+  await deleteStoredImages(collectImageUrls(guard.site.config));
   revalidateTag(`site:${guard.site.slug}`, { expire: 0 });
   return NextResponse.json({ ok: true });
 }

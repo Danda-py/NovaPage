@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SITE_TEMPLATES, type SiteTemplateId } from "@/lib/site";
 import { safeFetch } from "@/lib/http";
 
@@ -12,6 +12,24 @@ export function NewSite() {
   const [template, setTemplate] = useState<SiteTemplateId>("essenziale");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const panel = useRef<HTMLFormElement>(null);
+
+  // Un pannello aperto in alto non deve restare lì se l'utente tocca la pagina.
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!panel.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -55,7 +73,10 @@ export function NewSite() {
 
   return (
     <form
+      ref={panel}
       onSubmit={create}
+      role="dialog"
+      aria-label="Crea una nuova landing"
       className="absolute right-3 top-[6.25rem] z-30 w-[min(92vw,20rem)] space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl sm:right-5 sm:top-16"
     >
       <div>

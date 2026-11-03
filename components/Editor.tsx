@@ -36,21 +36,65 @@ type SpeechWindow = {
   webkitSpeechRecognition?: new () => Recognition;
 };
 
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * La risposta della chat arriva dopo qualche secondo: in quel tempo l'utente può
+ * aver modificato a mano testi o blocchi. Si tiene la sua versione per tutto ciò
+ * che ha toccato e si applica quella dell'AI solo al resto, invece di perdere
+ * silenziosamente il lavoro fatto durante l'attesa.
+ */
+function mergeLocalEdits(base: Site, local: Site, incoming: Site): Site {
+  if (same(local, base)) return incoming;
+
+  const blocks = incoming.blocks.map((block) => {
+    const before = base.blocks.find((item) => item.id === block.id);
+    const current = local.blocks.find((item) => item.id === block.id);
+    return current && !same(current, before) ? current : block;
+  });
+  for (const block of local.blocks) {
+    if (blocks.some((item) => item.id === block.id)) continue;
+    const before = base.blocks.find((item) => item.id === block.id);
+    if (!before || !same(block, before)) blocks.push(block);
+  }
+
+  const localHtml = local.html ?? "";
+  const baseHtml = base.html ?? "";
+  const html = localHtml !== baseHtml ? local.html : incoming.html;
+
+  return {
+    ...incoming,
+    meta: same(local.meta, base.meta) ? incoming.meta : local.meta,
+    theme: same(local.theme, base.theme) ? incoming.theme : local.theme,
+    blocks,
+    ...(same(local.legal, base.legal) ? { legal: incoming.legal } : { legal: local.legal }),
+    ...(same(local.hideBadge, base.hideBadge)
+      ? { hideBadge: incoming.hideBadge }
+      : { hideBadge: local.hideBadge }),
+    ...(html ? { html } : { html: undefined }),
+  };
+}
+
 export function Editor({
   siteId,
   initialSite,
   slug,
+  customDomain,
   initialMessages,
   restorableMessageIds,
 }: {
   siteId: string;
   initialSite: Site;
   slug: string;
+  /** Presente solo quando il dominio è verificato e serve la pagina. */
+  customDomain?: string;
   initialMessages: ChatMessage[];
   /** Messaggi con una fotografia della pagina (ultimi cinque turni). */
   restorableMessageIds: string[];
 }) {
   const [site, setSite] = useState<Site>(initialSite);
+  const siteRef = useRef<Site>(initialSite);
+  const publicHref = customDomain ? `https://${customDomain}` : `/s/${slug}`;
   const [restorable, setRestorable] = useState<string[]>(restorableMessageIds);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -142,7 +186,17 @@ export function Editor({
     if (!files?.length) return;
     setUploading(true);
     setUploadError("");
-    for (const file of Array.from(files).slice(0, 3)) {
+    const room = 6 - images.length;
+    if (room <= 0) {
+      setUploadError("Puoi allegare al massimo 6 foto per messaggio.");
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
+    if (files.length > room) {
+      setUploadError(`Puoi aggiungere ancora ${room} foto: le altre non sono state caricate.`);
+    }
+    for (const file of Array.from(files).slice(0, room)) {
       const fd = new FormData();
       fd.append("file", file);
       try {
@@ -161,6 +215,7 @@ export function Editor({
 
   /** Ogni stato distinto entra in cronologia una volta sola. */
   function applySite(next: Site) {
+    siteRef.current = next;
     setSite(next);
     const current = historyRef.current[cursorRef.current];
     if (current && JSON.stringify(current) === JSON.stringify(next)) return;
@@ -173,7 +228,8 @@ export function Editor({
   function undo() {
     if (cursorRef.current <= 0) return;
     cursorRef.current -= 1;
-    setSite(historyRef.current[cursorRef.current]);
+    siteRef.current = historyRef.current[cursorRef.current];
+    setSite(siteRef.current);
     setCanUndo(cursorRef.current > 0);
     setCanRedo(true);
   }
@@ -181,7 +237,8 @@ export function Editor({
   function redo() {
     if (cursorRef.current >= historyRef.current.length - 1) return;
     cursorRef.current += 1;
-    setSite(historyRef.current[cursorRef.current]);
+    siteRef.current = historyRef.current[cursorRef.current];
+    setSite(siteRef.current);
     setCanUndo(true);
     setCanRedo(cursorRef.current < historyRef.current.length - 1);
   }
@@ -272,6 +329,9 @@ export function Editor({
     setImages([]);
     setLoading(true);
     await flushSave();
+    // Stato di partenza della richiesta: serve a distinguere le modifiche fatte
+    // a mano durante l'attesa da quelle già presenti prima.
+    const requestBase = siteRef.current;
     setMessages((prev) => [
       ...prev,
       {
@@ -297,7 +357,15 @@ export function Editor({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Errore");
-      if (data.site) applySite(data.site as Site);
+      if (data.site) {
+        const incoming = data.site as Site;
+        const local = siteRef.current;
+        const merged = mergeLocalEdits(requestBase, local, incoming);
+        applySite(merged);
+        if (!same(local, requestBase)) {
+          setNotice("Ho mantenuto le modifiche fatte a mano durante la risposta.");
+        }
+      }
       if (Array.isArray(data.messages)) setMessages(data.messages as ChatMessage[]);
       // Il turno appena fatto è ripristinabile subito, senza ricaricare la pagina.
       if (typeof data.restorePoint === "string") {
@@ -306,6 +374,10 @@ export function Editor({
       setSave("saved");
     } catch (e) {
       setSave("error");
+      // La richiesta non è partita: rimetti allegati e testo, senza sovrascrivere
+      // ciò che l'utente ha ricominciato a scrivere nel frattempo.
+      setInput((prev) => prev || message);
+      setImages((prev) => (prev.length ? prev : attachments));
       setMessages((prev) => [
         ...prev,
         {
@@ -548,7 +620,7 @@ export function Editor({
           Statistiche
         </Link>
         <Link
-          href={`/s/${slug}`}
+          href={publicHref}
           target="_blank"
           className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-zinc-800 px-2 text-xs font-medium text-zinc-100 hover:bg-zinc-700 sm:px-2.5"
         >
@@ -616,12 +688,28 @@ export function Editor({
 
           <div className={`${tab === "chat" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>{chat}</div>
           <div className={`${tab === "edit" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
-            <ManualEditor
-              site={site}
-              onChange={applySite}
-              openId={selectedBlock}
-              onOpenChange={setSelectedBlock}
-            />
+            {isHtmlPage(site) ? (
+              <div className="space-y-3 p-4">
+                <p className="text-[12.5px] leading-relaxed text-zinc-400">
+                  Questa pagina è in HTML libero: i blocchi non vengono usati. Modifica il codice
+                  nella scheda HTML.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setTab("html")}
+                  className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500"
+                >
+                  Apri l&apos;editor HTML
+                </button>
+              </div>
+            ) : (
+              <ManualEditor
+                site={site}
+                onChange={applySite}
+                openId={selectedBlock}
+                onOpenChange={setSelectedBlock}
+              />
+            )}
           </div>
           <div className={`${tab === "html" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
             <HtmlEditor site={site} onChange={applySite} />

@@ -37,6 +37,10 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
     listVersions(site.id),
   ]);
   const readiness = siteReadiness(site.config);
+  const publicHref =
+    site.domainVerified && site.customDomain ? `https://${site.customDomain}` : `/s/${site.slug}`;
+  const publicLabel =
+    site.domainVerified && site.customDomain ? site.customDomain : `/s/${site.slug}`;
   const clicks = Object.entries(site.stats.clicks).sort((a, b) => b[1] - a[1]);
   const totalClicks = clicks.reduce((sum, [, n]) => sum + n, 0);
   const uniques = site.stats.uniques;
@@ -97,13 +101,21 @@ export default async function SiteStatsPage({ params }: { params: Promise<{ id: 
                 : null
             }
           />
-          <Link
-            href={`/s/${site.slug}`}
-            target="_blank"
-            className="mt-2 inline-flex min-h-9 items-center text-xs text-violet-400 hover:underline"
-          >
-            Apri /s/{site.slug} ↗
-          </Link>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <Link
+              href={publicHref}
+              target="_blank"
+              className="inline-flex min-h-9 items-center text-xs text-violet-400 hover:underline"
+            >
+              Apri {publicLabel} ↗
+            </Link>
+            <a
+              href={`/api/sites/${site.id}/export`}
+              className="inline-flex min-h-9 items-center text-xs text-zinc-400 hover:text-zinc-200 hover:underline"
+            >
+              Esporta pagina
+            </a>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">

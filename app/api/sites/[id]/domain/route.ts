@@ -79,7 +79,12 @@ export async function POST(req: Request, { params }: Ctx) {
     const site = await setSiteCustomDomain(id, pair.primary, token, pair.alias);
     if (!site) return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
     revalidateTag(`site:${site.slug}`, { expire: 0 });
-    return NextResponse.json({ site, records: domainRecords(pair.primary, token) });
+    // Se il dominio era già lo stesso, `setSiteCustomDomain` conserva il token
+    // esistente: restituire quello nuovo (mai salvato) farebbe fallire la verifica.
+    return NextResponse.json({
+      site,
+      records: domainRecords(pair.primary, site.customDomainToken ?? token),
+    });
   } catch (error) {
     // Un dominio in attesa su un'altra pagina non è visibile alla lettura
     // (considera solo i verificati), ma il vincolo unique lo blocca comunque.

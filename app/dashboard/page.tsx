@@ -3,7 +3,7 @@ export const metadata = { title: "I miei siti", robots: { index: false, follow: 
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { listLeadsForOwner, listSites } from "@/lib/store";
+import { leadCountsForOwner, listSites } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 import { SiteCard } from "@/components/SiteCard";
 import { NewSite } from "@/components/NewSite";
@@ -16,19 +16,14 @@ export default async function Dashboard() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const sites = await listSites(user.id);
-  const leads = await listLeadsForOwner(user.id);
+  const [sites, leadCounts] = await Promise.all([
+    listSites(user.id),
+    leadCountsForOwner(user.id),
+  ]);
 
-  const leadsBySite = new Map<string, number>();
-  const unreadBySite = new Map<string, number>();
-  let unreadTotal = 0;
-  for (const lead of leads) {
-    leadsBySite.set(lead.siteId, (leadsBySite.get(lead.siteId) ?? 0) + 1);
-    if (!lead.read) {
-      unreadBySite.set(lead.siteId, (unreadBySite.get(lead.siteId) ?? 0) + 1);
-      unreadTotal += 1;
-    }
-  }
+  const leadsBySite = new Map(leadCounts.bySite.map((row) => [row.siteId, row.total]));
+  const unreadBySite = new Map(leadCounts.bySite.map((row) => [row.siteId, row.unread]));
+  const unreadTotal = leadCounts.unread;
 
   // Solo i primi tre: la dashboard deve orientare, non diventare una lista di compiti.
   const needsWork = sites
@@ -86,7 +81,7 @@ export default async function Dashboard() {
         <h1 className="text-2xl font-semibold tracking-tight">I miei siti</h1>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
           <span>
-            {sites.length} landing page · {leads.length} contatti ricevuti
+            {sites.length} landing page · {leadCounts.total} contatti ricevuti
           </span>
           {unreadTotal > 0 && (
             <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-medium text-violet-300">

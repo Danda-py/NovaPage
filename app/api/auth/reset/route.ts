@@ -11,8 +11,8 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { token?: string; password?: string } | null;
-  const token = body?.token?.trim() ?? "";
-  const password = body?.password ?? "";
+  const token = typeof body?.token === "string" ? body.token.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
 
   if (token.length < 32) {
     return NextResponse.json({ error: "Link non valido o scaduto" }, { status: 400 });

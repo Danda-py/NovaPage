@@ -94,9 +94,22 @@ export function resetEmailHtml(link: string): string {
 }
 
 /**
- * Avviso di sicurezza: password o email cambiate. Se non sei stato tu, l'utente
- * deve poterlo capire subito da un messaggio che non dipende dal sito.
+ * Cambio email: il link arriva al nuovo indirizzo e va cliccato entro un'ora.
  */
+export function emailChangeHtml(link: string, newEmail: string): string {
+  return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
+  <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">NovaPage</p>
+  <h1 style="font-size:22px;margin:0 0 12px">Conferma il nuovo indirizzo</h1>
+  <p style="font-size:14px;line-height:1.6;color:#a1a1aa;margin:0 0 24px">
+    Hai chiesto di usare ${escapeHtml(newEmail)} per il tuo account NovaPage. Il link scade tra un'ora e può essere usato una sola volta. Se non hai richiesto il cambio, ignora questa email.
+  </p>
+  <a href="${link}" style="display:inline-block;background:#8b5cf6;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600">
+    Conferma l'indirizzo
+  </a>
+  <p style="font-size:12px;color:#52525b;margin:24px 0 0">${link}</p>
+</div>`;
+}
+
 export function securityEmailHtml(input: { title: string; body: string }): string {
   return `<div style="font-family:system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px">
   <p style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8b5cf6;margin:0 0 16px">NovaPage</p>

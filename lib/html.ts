@@ -261,10 +261,30 @@ export function applyHtmlPatches(
   return { html: next, applied, failed };
 }
 
-/** Riempie il segnaposto dei link legali scritto dall'IA nel footer della pagina. */
-export function injectLegalLinks(html: string, slug: string): string {
+/**
+ * Riempie il segnaposto dei link legali scritto dall'IA nel footer della pagina.
+ * Su un dominio personalizzato i link non devono tornare al percorso /s/: la
+ * base è vuota e le pagine legali vivono alla radice.
+ */
+export function injectLegalLinks(
+  html: string,
+  slug: string,
+  options: {
+    base?: string;
+    legal?: { businessName?: string; vat?: string; address?: string };
+  } = {},
+): string {
   const safe = slug.replace(/[^a-z0-9-]/gi, "");
-  const links = `<nav data-np-legal style="display:block;text-align:center;font-size:11px;line-height:1.7;padding:16px 12px;opacity:.65"><a href="/s/${safe}/privacy" style="color:inherit">Privacy</a> · <a href="/s/${safe}/cookie" style="color:inherit">Cookie</a> · <a href="/s/${safe}/termini" style="color:inherit">Termini</a></nav>`;
+  const base = options.base === "" ? "" : (options.base ?? `/s/${safe}`).replace(/\/$/, "");
+  const owner = [
+    options.legal?.businessName,
+    options.legal?.vat ? `P.IVA ${options.legal.vat}` : "",
+    options.legal?.address,
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map((value) => `<span style="display:block">${escapeAttribute(value)}</span>`)
+    .join("");
+  const links = `<nav data-np-legal style="display:block;text-align:center;font-size:11px;line-height:1.7;padding:16px 12px;opacity:.65">${owner}<a href="${base}/privacy" style="color:inherit">Privacy</a> · <a href="${base}/cookie" style="color:inherit">Cookie</a> · <a href="${base}/termini" style="color:inherit">Termini</a></nav>`;
 
   return html.replace(/<span\b[^>]*data-novapage-legal[^>]*>\s*<\/span>/gi, links);
 }

@@ -351,14 +351,9 @@ export function templateConfig(title: string, template?: string): Site {
       blocks.push(make("hours"), make("gallery"), make("contact"));
       break;
     case "professionista":
-      blocks.push(
-        make("links", {
-          buttons: [
-            { label: "Scrivimi su WhatsApp", url: "https://wa.me/39", icon: "whatsapp", variant: "primary" },
-          ],
-        }),
-        make("form"),
-      );
+      // Niente link segnaposto: un wa.me/39 sembra un contatto reale e la
+      // checklist non lo segnala, quindi il visitatore troverebbe un vicolo cieco.
+      blocks.push(make("contact"), make("form"));
       break;
     case "vetrina":
       blocks.push(make("catalog"), make("form"));

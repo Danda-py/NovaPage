@@ -20,11 +20,13 @@ import { sanitizeHtmlStrict } from "@/lib/html-strict";
 import { riskyMarkup } from "@/lib/moderation";
 import { getCurrentUser } from "@/lib/auth";
 import { decryptSecret } from "@/lib/secure";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, tooMany } from "@/lib/rate-limit";
+import { isManagedImageUrl } from "@/lib/storage";
 import {
   aiConfigured,
   aiTarget,
   generationConfig,
+  isThinkingUnsupported,
   readUsage,
   type AiIntent,
   type AiTarget,
@@ -356,17 +358,29 @@ export async function POST(req: Request) {
     answers?: Record<string, string>;
   } | null;
 
-  const siteId = body?.siteId;
-  const message = body?.message?.trim() ?? "";
+  const siteId = typeof body?.siteId === "string" ? body.siteId : "";
+  const message = typeof body?.message === "string" ? body.message.trim() : "";
   if (message.length > 2000) {
     return NextResponse.json(
       { error: "Messaggio troppo lungo (max 2000 caratteri): dividilo in più richieste." },
       { status: 400 },
     );
   }
-  const images = (body?.images ?? [])
-    .filter((u) => typeof u === "string" && u.startsWith("/uploads/"))
+  // In produzione `saveImage` restituisce un URL Blob assoluto, in sviluppo un
+  // percorso /uploads/: entrambi sono validi, i link arbitrari no.
+  const images = (Array.isArray(body?.images) ? body.images : [])
+    .filter(isManagedImageUrl)
     .slice(0, 6);
+  const answerFor = typeof body?.answerFor === "string" ? body.answerFor : undefined;
+  const answers =
+    body?.answers && typeof body.answers === "object" && !Array.isArray(body.answers)
+      ? Object.fromEntries(
+          Object.entries(body.answers)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+            .slice(0, 12)
+            .map(([key, value]) => [key.slice(0, 80), value.slice(0, 1000)]),
+        )
+      : undefined;
   if (!siteId || (!message && !images.length)) {
     return NextResponse.json({ error: "Richiesta non valida" }, { status: 400 });
   }
@@ -389,10 +403,7 @@ export async function POST(req: Request) {
   const userId = user.id;
   const limit = await rateLimit(`chat:${userId}`, 40, 60 * 60 * 1000);
   if (!limit.ok) {
-    return NextResponse.json(
-      { error: `Troppi messaggi in poco tempo. Riprova tra ${limit.retryAfter} secondi.` },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: tooMany(limit.retryAfter) }, { status: 429 });
   }
 
   const record = await getSite(siteId);
@@ -400,8 +411,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
   }
 
-  if (body?.answerFor && body.answers) {
-    await setChatAnswers(siteId, body.answerFor, body.answers);
+  if (answerFor && answers) {
+    await setChatAnswers(siteId, answerFor, answers);
   }
 
   const wantsNewLook =
@@ -516,19 +527,22 @@ export async function POST(req: Request) {
     const config = payload.generationConfig as Record<string, unknown>;
     if (res.status === 400 && "thinkingConfig" in config) {
       const detail = await res.clone().text().catch(() => "");
-      delete config.thinkingConfig;
-      res = await fetch(target.url, {
-        method: "POST",
-        headers: target.headers,
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        await logError({
-          source: "ai",
-          message: `Riprova senza thinkingConfig: ${res.status}`,
-          detail: detail.slice(0, 300),
-          userId,
+      // Un 400 per un altro motivo non deve far spendere una seconda richiesta.
+      if (isThinkingUnsupported(res.status, detail)) {
+        delete config.thinkingConfig;
+        res = await fetch(target.url, {
+          method: "POST",
+          headers: target.headers,
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          await logError({
+            source: "ai",
+            message: `Riprova senza thinkingConfig: ${res.status}`,
+            detail: detail.slice(0, 300),
+            userId,
+          });
+        }
       }
     }
     return res;

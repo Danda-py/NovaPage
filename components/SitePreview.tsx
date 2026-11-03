@@ -578,16 +578,6 @@ export function SitePreview({
           <span className="text-[10px] uppercase tracking-[0.18em]" style={{ color: alpha(t.text_color, 0.55) }}>
             {site.meta.title}
           </span>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px]"
-            style={{
-              border: `1px solid ${alpha(t.text_color, 0.16)}`,
-              color: alpha(t.text_color, 0.55),
-            }}
-          >
-            <span className="h-1 w-1 rotate-45 rounded-[1px]" style={{ backgroundColor: t.accent_color }} />
-            Creato con NovaPage
-          </span>
         </footer>
       </div>
     </div>

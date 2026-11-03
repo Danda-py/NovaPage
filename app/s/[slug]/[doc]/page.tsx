@@ -3,9 +3,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { headers } from "next/headers";
 import { getSiteBySlug } from "@/lib/store";
 import { isLegalDoc, legalDocContent } from "@/lib/legal-doc";
 import { emailConfigured } from "@/lib/email";
+import { publicBaseUrl, publicPath, requestHost } from "@/lib/public-url";
 
 type Params = Promise<{ slug: string; doc: string }>;
 
@@ -23,10 +25,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     updatedAt: site.updatedAt,
   });
 
+  const headerBag = await headers();
+  const host = requestHost((name) => headerBag.get(name));
+
   return {
+    metadataBase: new URL(publicBaseUrl(site, host)),
     title: `${content.title} · ${site.config.meta.title}`,
     description: content.intro.slice(0, 160),
-    alternates: { canonical: `/s/${site.slug}/${doc}` },
+    alternates: { canonical: publicPath(site, host, `/${doc}`) },
     // Informativa e condizioni si leggono, ma non devono competere in ricerca con la landing.
     robots: { index: false, follow: true },
   };
@@ -46,12 +52,16 @@ export default async function LegalPage({ params }: { params: Params }) {
     services: { email: emailConfigured() },
   });
   const accent = site.config.theme.accent_color;
+  const headerBag = await headers();
+  const host = requestHost((name) => headerBag.get(name));
+  const prefix = publicPath(site, host).replace(/\/$/, "");
+  const homePath = prefix || "/";
 
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 py-4">
-          <Link href={`/s/${site.slug}`} className="text-xs text-zinc-400 hover:text-zinc-200">
+          <Link href={homePath} className="text-xs text-zinc-400 hover:text-zinc-200">
             ← {site.config.meta.title}
           </Link>
           <span
@@ -90,9 +100,9 @@ export default async function LegalPage({ params }: { params: Params }) {
         </p>
 
         <nav className="mt-6 flex flex-wrap gap-3 text-[11.5px] text-zinc-500">
-          <Link href={`/s/${site.slug}/privacy`} className="hover:text-zinc-300">Privacy</Link>
-          <Link href={`/s/${site.slug}/cookie`} className="hover:text-zinc-300">Cookie</Link>
-          <Link href={`/s/${site.slug}/termini`} className="hover:text-zinc-300">Termini</Link>
+          <Link href={`${prefix}/privacy`} className="hover:text-zinc-300">Privacy</Link>
+          <Link href={`${prefix}/cookie`} className="hover:text-zinc-300">Cookie</Link>
+          <Link href={`${prefix}/termini`} className="hover:text-zinc-300">Termini</Link>
         </nav>
       </main>
     </div>

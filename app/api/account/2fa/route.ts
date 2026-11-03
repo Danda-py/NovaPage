@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, verifyPassword } from "@/lib/auth";
 import {
+  createSessionToken,
+  getCurrentUser,
+  sessionCookieOptions,
+  verifyPassword,
+} from "@/lib/auth";
+import {
+  bumpSessionVersion,
   disableTwoFactor,
   enableTwoFactor,
   setTwoFactorSecret,
@@ -44,7 +50,7 @@ export async function PUT(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { code?: string } | null;
-  const code = body?.code ?? "";
+  const code = typeof body?.code === "string" ? body.code : "";
   if (!user.twoFactorSecret) {
     return NextResponse.json(
       { error: "Attivazione non avviata: ricarica la pagina" },
@@ -58,7 +64,12 @@ export async function PUT(req: Request) {
   // I codici in chiaro escono una sola volta: nel database restano solo gli hash.
   const recovery = generateRecoveryCodes();
   await enableTwoFactor(user.id, recovery.map(hashRecoveryCode));
-  return NextResponse.json({ ok: true, recovery });
+  // Attivare il secondo fattore deve disconnettere le sessioni rubate già aperte,
+  // rinnovando solo quella che ha appena confermato il codice.
+  const version = await bumpSessionVersion(user.id);
+  const res = NextResponse.json({ ok: true, recovery });
+  res.cookies.set({ ...sessionCookieOptions, value: createSessionToken(user.id, version) });
+  return res;
 }
 
 export async function DELETE(req: Request) {
@@ -71,12 +82,15 @@ export async function DELETE(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { password?: string } | null;
-  const password = body?.password ?? "";
+  const password = typeof body?.password === "string" ? body.password : "";
   // Disattivare il secondo fattore è una riduzione di sicurezza: serve la password.
   if (!(await verifyPassword(password, user.salt, user.passwordHash))) {
     return NextResponse.json({ error: "Password non corretta" }, { status: 401 });
   }
 
   await disableTwoFactor(user.id);
-  return NextResponse.json({ ok: true });
+  const version = await bumpSessionVersion(user.id);
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set({ ...sessionCookieOptions, value: createSessionToken(user.id, version) });
+  return res;
 }

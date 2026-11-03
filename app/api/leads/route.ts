@@ -27,7 +27,7 @@ export async function DELETE(req: Request) {
     siteId?: string;
     leadId?: string;
   } | null;
-  if (!body?.siteId || !body?.leadId) {
+  if (typeof body?.siteId !== "string" || typeof body?.leadId !== "string") {
     return NextResponse.json({ error: "siteId e leadId sono obbligatori" }, { status: 400 });
   }
 
@@ -52,7 +52,7 @@ export async function PATCH(req: Request) {
     handled?: boolean;
     notes?: string;
   } | null;
-  if (!body?.siteId || !body?.leadId) {
+  if (typeof body?.siteId !== "string" || typeof body?.leadId !== "string") {
     return NextResponse.json({ error: "siteId e leadId sono obbligatori" }, { status: 400 });
   }
 
@@ -64,7 +64,7 @@ export async function PATCH(req: Request) {
     );
   }
 
-  if (body.notes !== undefined && body.notes.length > 2000) {
+  if (typeof body.notes === "string" && body.notes.length > 2000) {
     return NextResponse.json({ error: "Nota troppo lunga (max 2000 caratteri)" }, { status: 400 });
   }
 
@@ -90,7 +90,9 @@ export async function POST(req: Request) {
   } | null;
 
   // Honeypot: i bot compilano il campo nascosto, gli umani no.
-  if (body?.website) return NextResponse.json({ ok: true }, { status: 201 });
+  if (typeof body?.website === "string" && body.website) {
+    return NextResponse.json({ ok: true }, { status: 201 });
+  }
 
   // Nessun umano compila un modulo in meno di un secondo e mezzo: rispondiamo
   // "ok" per non dare al bot un segnale, ma il lead non viene salvato.
@@ -98,47 +100,46 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 201 });
   }
 
-  if (!body?.siteId || !(body.name?.trim() || body.email?.trim() || body.phone?.trim())) {
+  const siteId = typeof body?.siteId === "string" ? body.siteId : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
+  const message = typeof body?.message === "string" ? body.message.trim() : "";
+
+  if (!siteId || !(name || email || phone)) {
     return NextResponse.json({ error: "Inserisci almeno un recapito" }, { status: 400 });
   }
 
-  if (body.consent !== true) {
+  if (body?.consent !== true) {
     return NextResponse.json(
       { error: "Serve il consenso al trattamento dei dati per inviare il modulo" },
       { status: 400 },
     );
   }
 
-  const limit = await rateLimit(`lead:${clientIp(req)}:${body.siteId}`, 10, 60 * 60 * 1000);
+  const limit = await rateLimit(`lead:${clientIp(req)}:${siteId}`, 10, 60 * 60 * 1000);
   if (!limit.ok) {
     return NextResponse.json({ error: tooMany(limit.retryAfter) }, { status: 429 });
   }
 
   // Solo una pagina pubblicata raccoglie contatti: una bozza non ha un modulo
   // raggiungibile e l'endpoint non deve poter riempire la casella del titolare.
-  const site = await getSite(body.siteId);
+  const site = await getSite(siteId);
   if (!site || !site.published) {
     return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
   }
 
-  const email = (body.email ?? "").trim();
   if (email && !EMAIL.test(email)) {
     return NextResponse.json({ error: "Email non valida" }, { status: 400 });
   }
-  if (body.message && body.message.length > 1000) {
+  if (message.length > 1000) {
     return NextResponse.json({ error: "Messaggio troppo lungo (max 1000 caratteri)" }, { status: 400 });
   }
 
-  const lead = await addLead(body.siteId, {
-    name: (body.name ?? "").trim(),
-    email,
-    phone: (body.phone ?? "").trim(),
-    message: (body.message ?? "").trim(),
-  });
+  const lead = await addLead(siteId, { name, email, phone, message });
   if (!lead) return NextResponse.json({ error: "Sito non trovato" }, { status: 404 });
 
   // Notifica al titolare dopo la risposta: il visitatore non attende l'invio.
-  const siteId = body.siteId;
   if (emailConfigured()) {
     after(async () => {
       const owner = await findOwnerContact(siteId);

@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     subject?: string;
     text?: string;
   } | null;
-  if (!body?.siteId || !body?.leadId) {
+  if (typeof body?.siteId !== "string" || typeof body?.leadId !== "string") {
     return NextResponse.json({ error: "siteId e leadId sono obbligatori" }, { status: 400 });
   }
 
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const text = (body.text ?? "").trim();
+  const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text) return NextResponse.json({ error: "Scrivi il testo della risposta" }, { status: 400 });
   if (text.length > MAX_BODY) {
     return NextResponse.json({ error: "Risposta troppo lunga" }, { status: 400 });
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   const owner = await findOwnerContact(body.siteId);
   const title = owner?.title ?? guard.site.config.meta.title;
-  const subject = (body.subject ?? "").trim().slice(0, 140) || `Re: ${title}`;
+  const subject = (typeof body.subject === "string" ? body.subject.trim() : "").slice(0, 140) || `Re: ${title}`;
 
   const sent = await sendEmail({
     to: lead.email,

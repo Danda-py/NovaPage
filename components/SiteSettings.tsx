@@ -13,7 +13,7 @@ type DomainRecords = {
   dns: DnsRecord[];
 };
 
-type SlugStatus = "idle" | "checking" | "available" | "taken";
+type SlugStatus = "idle" | "checking" | "available" | "taken" | "unknown";
 
 export function SiteSettings({
   siteId,
@@ -43,7 +43,10 @@ export function SiteSettings({
   const [saveError, setSaveError] = useState("");
   // Esito dell'ultimo controllo: lo stato mostrato si ricava dal valore corrente,
   // così l'effetto non deve scrivere stato in modo sincrono.
-  const [slugCheck, setSlugCheck] = useState<{ value: string; available: boolean } | null>(null);
+  const [slugCheck, setSlugCheck] = useState<{
+    value: string;
+    available: boolean | null;
+  } | null>(null);
   const [isPublished, setIsPublished] = useState(published);
   const [toggling, setToggling] = useState(false);
   const [toggleError, setToggleError] = useState("");
@@ -63,9 +66,11 @@ export function SiteSettings({
     !nextSlug || nextSlug === slug
       ? "idle"
       : slugCheck?.value === nextSlug
-        ? slugCheck.available
+        ? slugCheck.available === true
           ? "available"
-          : "taken"
+          : slugCheck.available === false
+            ? "taken"
+            : "unknown"
         : "checking";
 
   const dirty = name.trim() !== title || nextSlug !== slug;
@@ -81,10 +86,19 @@ export function SiteSettings({
       const res = await safeFetch(
         `/api/sites/check-slug?slug=${encodeURIComponent(next)}&siteId=${encodeURIComponent(siteId)}`,
       );
-      if (cancelled || !res) return;
+      if (cancelled) return;
+      if (!res) {
+        // La rete assente non deve bloccare il salvataggio per sempre: il server
+        // ricontrolla comunque la disponibilità e risponde con un errore chiaro.
+        setSlugCheck({ value: next, available: null });
+        return;
+      }
       const data = await res.json().catch(() => ({}));
-      if (cancelled || typeof data.available !== "boolean") return;
-      setSlugCheck({ value: next, available: data.available });
+      if (cancelled) return;
+      setSlugCheck({
+        value: next,
+        available: typeof data.available === "boolean" ? data.available : null,
+      });
     }, 450);
 
     return () => {
@@ -200,7 +214,9 @@ export function SiteSettings({
         ? data.hosted === true
           ? "Dominio verificato e collegato all'hosting: la pagina risponde su entrambi i nomi."
           : "Dominio verificato. Manca l'ultimo passaggio lato hosting: riprova tra poco."
-        : "Record non ancora visibili: la propagazione DNS può richiedere qualche minuto.",
+        : data.ownershipVerified === true
+          ? "Proprietà verificata, ma il dominio non è ancora attivo: riprova tra poco."
+          : "Record TXT non ancora visibile: la propagazione DNS può richiedere qualche minuto.",
     );
     if (data.verified === true) router.refresh();
     setDomainBusy("");
@@ -241,7 +257,8 @@ export function SiteSettings({
     }
   }
 
-  const txtName = records?.txtName ?? (currentDomain ? `_novapage.${currentDomain}` : "");
+  const txtName =
+    records?.txtName ?? (currentDomain ? `_novapage.${currentDomain.replace(/^www\./, "")}` : "");
   const txtValue = records?.txtValue ?? (domainToken ? `novapage-verify=${domainToken}` : "");
   const servedHosts =
     records?.hosts ??
@@ -292,6 +309,11 @@ export function SiteSettings({
           {slugStatus === "checking" && <span className="text-zinc-500">Controllo disponibilità…</span>}
           {slugStatus === "available" && <span className="text-emerald-400">Indirizzo disponibile</span>}
           {slugStatus === "taken" && <span className="text-amber-300">Questo indirizzo è già in uso</span>}
+          {slugStatus === "unknown" && (
+            <span className="text-zinc-400">
+              Non ho potuto verificarlo ora: salva per confermare.
+            </span>
+          )}
         </p>
       </div>
 

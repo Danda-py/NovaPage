@@ -1,11 +1,12 @@
 export const instant = false;
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
 import { loadPublishedSite } from "@/lib/public-site";
 import { googleFontsHref } from "@/lib/fonts";
 import { siteUrl } from "@/lib/site-url";
+import { isCustomDomainRequest, publicBaseUrl, publicPath, requestHost } from "@/lib/public-url";
 import { jsonLdScript, pageDescription, siteJsonLd } from "@/lib/seo";
 import { SitePreview } from "@/components/SitePreview";
 import { SiteTracker } from "@/components/SiteTracker";
@@ -46,10 +47,15 @@ export async function generateMetadata({
 
   const title = site.config.meta.title;
   const description = pageDescription(site.config, title);
-  const canonical = `/s/${site.slug}`;
+  const headerBag = await headers();
+  const host = requestHost((name) => headerBag.get(name));
+  const base = publicBaseUrl(site, host);
+  const canonical = publicPath(site, host);
+  const socialImage = publicPath(site, host, "/opengraph-image");
 
   return {
     // Il titolo della landing è l'attività dell'utente: niente suffisso del brand.
+    metadataBase: new URL(base),
     title: { absolute: title },
     description,
     alternates: { canonical },
@@ -60,13 +66,13 @@ export async function generateMetadata({
       siteName: title,
       locale: "it_IT",
       type: "website",
-      images: [{ url: `${canonical}/opengraph-image`, width: 1200, height: 630, alt: title }],
+      images: [{ url: socialImage, width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [`${canonical}/opengraph-image`],
+      images: [socialImage],
     },
     robots: {
       index: true,
@@ -141,10 +147,16 @@ export default async function PublicPage({
   const palette = custom ? htmlPalette(site.config.html ?? "") : {};
   // Anche i link legali devono restare leggibili su una pagina chiara.
   const light = isLightColor(palette.bg ?? site.config.theme.bg_color);
+  const headerBag = await headers();
+  const host = requestHost((name) => headerBag.get(name));
+  const onCustomDomain = isCustomDomainRequest(site, host);
+  const legalBase = onCustomDomain ? "" : `/s/${site.slug}`;
+  const legalPlaceholder = /data-novapage-legal/i.test(site.config.html ?? "");
   const htmlBody = custom
     ? injectLegalLinks(
         injectLeadForm(optimizeImages(sanitizeHtml(site.config.html!)), site.slug),
         site.slug,
+        { base: legalBase, legal: site.config.legal },
       )
     : "";
   const hasMain = /<main[\s>]/i.test(htmlBody);
@@ -174,7 +186,12 @@ export default async function PublicPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: jsonLdScript(
-            siteJsonLd({ site: site.config, slug: site.slug, baseUrl: siteUrl() }),
+            siteJsonLd({
+              site: site.config,
+              slug: site.slug,
+              baseUrl: publicBaseUrl(site, host),
+              pageUrl: `${publicBaseUrl(site, host)}${publicPath(site, host)}`,
+            }),
           ),
         }}
       />
@@ -201,7 +218,16 @@ export default async function PublicPage({
           <SitePreview site={site.config} siteId={site.id} slug={site.slug} />
         </main>
       )}
-      <SiteLegalLinks slug={site.slug} light={light} />
+      {/* Se l'HTML ha il segnaposto, i link legali sono già nel suo footer: non
+          vanno ripetuti sotto la pagina. */}
+      {(!custom || !legalPlaceholder) && (
+        <SiteLegalLinks
+          slug={site.slug}
+          light={light}
+          base={legalBase}
+          legal={custom ? site.config.legal : undefined}
+        />
+      )}
       {/* Il badge porta sulla piattaforma: in relativo, su un dominio personalizzato
           riporterebbe alla pagina stessa. */}
       {!site.config.hideBadge && <SiteBadge href={`${siteUrl()}/?utm_source=badge&utm_medium=landing`} />}

@@ -25,6 +25,7 @@ export default async function EditorPage({ params }: { params: Promise<{ id: str
       siteId={site.id}
       initialSite={site.config}
       slug={site.slug}
+      customDomain={site.domainVerified ? site.customDomain : undefined}
       initialMessages={messages}
       restorableMessageIds={restorableMessageIds}
     />

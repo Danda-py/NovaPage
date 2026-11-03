@@ -23,6 +23,7 @@ const sections = [
       "Contenuti delle landing page: testi, immagini, colori e impostazioni che inserisci nella chat o carichi tramite l'editor.",
       "Contatti ricevuti dai moduli: nome, email, telefono e messaggio lasciati dai visitatori delle tue pagine, insieme alla data e al momento in cui hanno prestato il consenso.",
       "Statistiche: visite e clic sulle pagine pubblicate. Per contare i visitatori unici l'indirizzo IP viene trasformato in un'impronta hash salata che cambia ogni giorno: non viene conservato l'IP e non è possibile risalire alla persona.",
+      "Font: se una landing usa un font di Google, il browser lo scarica da fonts.googleapis.com; in quel caso Google riceve l'indirizzo IP del visitatore. I font di sistema non generano richieste esterne.",
       "Dati tecnici: log degli errori applicativi, senza contenuto dei messaggi scambiati in chat.",
     ],
   },
@@ -61,8 +62,8 @@ const sections = [
   {
     title: "Cookie",
     body: [
-      "NovaPage usa un solo cookie tecnico, necessario a mantenere la sessione di accesso: è HttpOnly, non contiene dati personali, non viene usato per profilazione e non richiede consenso.",
-      "Non usiamo Google Analytics né altri strumenti di tracciamento di terze parti. Nelle pagine pubblicate salviamo solo un segnalibro di sessione nel browser (sessionStorage) che evita di contare due volte la stessa visita nella stessa scheda: si cancella alla chiusura e non identifica la persona. Le visite uniche sono contate lato server con un'impronta hash giornaliera del solo indirizzo IP, che non viene conservato.",
+      "NovaPage usa due cookie tecnici: np_session, necessario a mantenere la sessione di accesso, e np_lead, che conserva per dieci minuti i valori del modulo contatti dopo un errore. Sono HttpOnly, non contengono dati personali, non vengono usati per profilazione e non richiedono consenso.",
+      "Non usiamo Google Analytics né altri strumenti di tracciamento di terze parti. Nelle pagine pubblicate salviamo solo un segnalibro di sessione nel browser (sessionStorage) che evita di contare due volte la stessa visita nella stessa scheda: si cancella alla chiusura e non identifica la persona. Le visite uniche sono contate lato server con un'impronta hash giornaliera del solo indirizzo IP, che non viene conservato. Se la pagina usa un font di Google, il browser lo richiede a fonts.googleapis.com: è una richiesta tecnica, non un cookie di profilazione.",
     ],
   },
 ];

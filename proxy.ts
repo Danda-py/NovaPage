@@ -42,22 +42,31 @@ export async function proxy(req: NextRequest) {
     const url = req.nextUrl.clone();
     const rest = req.nextUrl.pathname === "/" ? "" : req.nextUrl.pathname;
 
-    // I percorsi della piattaforma non vanno prefissati: `/s/casa/privacy` su un
-    // dominio personalizzato diventerebbe `/s/casa/s/casa/privacy` e darebbe 404.
-    // (Sono i link di privacy, cookie e termini della pagina.)
+    // Un vecchio link `/s/{slug}` sul dominio del cliente non deve mostrare
+    // un'altra pagina né duplicare l'indirizzo: si reindirizza alla radice.
     if (rest.startsWith("/s/")) {
-      // Anche qui però una pagina inesistente deve rispondere 404, non 200.
-      const inner = rest.match(/^\/s\/([^/]+)/)?.[1];
-      if (inner && !(await publishedSlugExists(decodeURIComponent(inner)))) return notFound();
-      url.pathname = rest;
-      return NextResponse.rewrite(url);
+      const match = rest.match(/^\/s\/([^/]+)(\/.*)?$/);
+      const inner = match?.[1] ? decodeURIComponent(match[1]) : "";
+      if (!inner || inner.toLowerCase() !== slug.toLowerCase()) return notFound();
+      const target = req.nextUrl.clone();
+      target.pathname = match?.[2] || "/";
+      return NextResponse.redirect(target, 308);
     }
 
     // Le aree private appartengono alla piattaforma: su un dominio del cliente non
     // si servono, si riporta l'utente sull'indirizzo giusto.
-    const appPath = ["/login", "/register", "/account", "/dashboard", "/editor", "/leads", "/sites", "/forgot", "/reset"].some(
-      (prefix) => rest === prefix || rest.startsWith(`${prefix}/`),
-    );
+    const appPath = [
+      "/login",
+      "/register",
+      "/account",
+      "/dashboard",
+      "/editor",
+      "/leads",
+      "/sites",
+      "/forgot",
+      "/reset",
+      "/conferma-email",
+    ].some((prefix) => rest === prefix || rest.startsWith(`${prefix}/`));
     if (appPath && platform) {
       try {
         const target = new URL(rest + req.nextUrl.search, siteUrl());

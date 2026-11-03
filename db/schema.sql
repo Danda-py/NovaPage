@@ -123,6 +123,19 @@ create table if not exists password_resets (
 
 create index if not exists password_resets_user_idx on password_resets(user_id);
 
+-- Cambio email: il nuovo indirizzo diventa effettivo solo dopo il clic sul link
+-- inviato lì. Il token è salvato come hash, dura un'ora e vale una volta sola.
+create table if not exists email_changes (
+  token_hash text primary key,
+  user_id    text not null references users(id) on delete cascade,
+  new_email  text not null,
+  expires_at timestamptz not null,
+  used_at    timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists email_changes_user_idx on email_changes(user_id);
+
 -- Cronologia: uno snapshot della configurazione prima di ogni modifica.
 create table if not exists site_versions (
   id         text primary key,

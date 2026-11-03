@@ -18,6 +18,13 @@ const rows = [
     type: "Tecnico, necessario",
   },
   {
+    name: "np_lead",
+    purpose:
+      "Ricorda per dieci minuti i valori del modulo contatti dopo un errore, per non far riscrivere tutto. È HttpOnly e non identifica il visitatore.",
+    duration: "10 minuti",
+    type: "Tecnico, necessario",
+  },
+  {
     name: "np_view_* (sessionStorage)",
     purpose:
       "Evita di contare due volte la stessa visita nella stessa scheda del browser. Non identifica la persona e si cancella alla chiusura della scheda.",
@@ -37,7 +44,7 @@ const sections = [
   {
     title: "Cookie usati da NovaPage",
     body: [
-      "NovaPage usa un solo cookie: np_session. È HttpOnly, SameSite=Lax, Secure quando il sito è in produzione e dura 30 giorni. Serve esclusivamente a riconoscere l'utente autenticato e senza di esso non sarebbe possibile accedere alla dashboard o all'editor. Non contiene dati personali e non viene usato per profilazione o pubblicità.",
+      "NovaPage usa due cookie tecnici. np_session (HttpOnly, SameSite=Lax, Secure in produzione, 30 giorni) riconosce l'utente autenticato: senza di esso non sarebbe possibile accedere alla dashboard o all'editor. np_lead (HttpOnly, 10 minuti) conserva temporaneamente i valori del modulo contatti se l'invio restituisce un errore. Nessuno dei due contiene dati personali o serve a profilazione e pubblicità.",
       "Nelle pagine pubbliche delle landing viene usato sessionStorage per non registrare due volte la stessa visita nella stessa scheda: è un dato tecnico, cancellato alla chiusura della scheda, e non permette di riconoscere il visitatore.",
     ],
   },
@@ -46,6 +53,7 @@ const sections = [
     body: [
       "Non usiamo Google Analytics, PostHog, pixel pubblicitari o altri strumenti di tracciamento di terze parti.",
       "Non salviamo identificativi permanenti nel browser dei visitatori delle pagine pubblicate. Le visite uniche sono contate lato server con un'impronta hash salata dell'indirizzo IP che cambia ogni giorno: l'IP non viene conservato e non è possibile risalire alla persona.",
+      "Se una landing usa un font di Google, il browser lo scarica da fonts.googleapis.com e Google riceve l'indirizzo IP del visitatore. Non viene impostato alcun cookie di profilazione; chi preferisce evitare la richiesta può usare i font di sistema.",
     ],
   },
   {

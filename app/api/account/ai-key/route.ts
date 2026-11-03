@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { key?: string } | null;
-  const key = (body?.key ?? "").trim();
+  const key = typeof body?.key === "string" ? body.key.trim() : "";
   if (!KEY.test(key)) {
     return NextResponse.json(
       { error: "Chiave non valida: incolla la chiave completa di Google AI Studio" },

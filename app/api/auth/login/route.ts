@@ -16,8 +16,8 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { email?: string; password?: string } | null;
-  const email = body?.email?.trim().toLowerCase() ?? "";
-  const password = body?.password ?? "";
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
 
   if (!email || !password) {
     return NextResponse.json({ error: "Inserisci email e password" }, { status: 400 });

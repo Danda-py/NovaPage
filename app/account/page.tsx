@@ -3,7 +3,7 @@ export const metadata = { title: "Account", robots: { index: false, follow: fals
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { aiUsageThisMonth, listLeadsForOwner, listSites } from "@/lib/store";
+import { aiUsageThisMonth, leadCountsForOwner, listSites } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth";
 import { decryptSecret } from "@/lib/secure";
 import { Brand } from "@/components/Brand";
@@ -21,9 +21,9 @@ export default async function AccountPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [sites, leads, aiUsage] = await Promise.all([
+  const [sites, leadCounts, aiUsage] = await Promise.all([
     listSites(user.id),
-    listLeadsForOwner(user.id),
+    leadCountsForOwner(user.id),
     aiUsageThisMonth(user.id),
   ]);
   const memberSince = new Date(user.createdAt).toLocaleDateString("it-IT", { dateStyle: "long" });
@@ -67,7 +67,7 @@ export default async function AccountPage() {
             <div className="flex flex-wrap justify-between gap-2">
               <dt className="text-zinc-500">Contenuti</dt>
               <dd className="text-zinc-200">
-                {sites.length} landing page · {leads.length} contatti
+                {sites.length} landing page · {leadCounts.total} contatti
               </dd>
             </div>
             <div className="flex flex-wrap justify-between gap-2">

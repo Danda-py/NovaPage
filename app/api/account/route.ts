@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, sessionCookieOptions, verifyPassword } from "@/lib/auth";
-import { deleteUser, logError } from "@/lib/store";
+import { deleteUser, listSites, logError } from "@/lib/store";
+import { collectImageUrls } from "@/lib/images";
+import { deleteStoredImages } from "@/lib/storage";
 import { clientIp, rateLimit, tooMany } from "@/lib/rate-limit";
 
 export async function DELETE(req: Request) {
@@ -18,7 +20,11 @@ export async function DELETE(req: Request) {
   }
 
   try {
+    // Le immagini non sono nel database: vanno raccolte prima che il cascade
+    // cancelli i siti, poi rimosse dallo storage dopo l'eliminazione.
+    const sites = await listSites(user.id);
     await deleteUser(user.id);
+    await deleteStoredImages(sites.flatMap((site) => collectImageUrls(site.config)));
   } catch (error) {
     await logError({ source: "account", message: "Cancellazione account fallita", detail: String(error), userId: user.id });
     return NextResponse.json({ error: "Cancellazione non riuscita, riprova" }, { status: 500 });

@@ -146,9 +146,15 @@ function images(site: Site, baseUrl: string): string[] {
 }
 
 /** Grafo schema.org della pagina pubblicata. */
-export function siteJsonLd(input: { site: Site; slug: string; baseUrl: string }): Json {
+export function siteJsonLd(input: {
+  site: Site;
+  slug: string;
+  baseUrl: string;
+  /** Indirizzo canonico quando la pagina vive su un dominio personalizzato. */
+  pageUrl?: string;
+}): Json {
   const { site, slug, baseUrl } = input;
-  const url = `${baseUrl}/s/${slug}`;
+  const url = input.pageUrl ?? `${baseUrl}/s/${slug}`;
   const title = site.meta.title;
   const description = site.meta.description || `${title}: contatti, orari e link utili.`;
 

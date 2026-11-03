@@ -20,8 +20,8 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { current?: string; next?: string } | null;
-  const current = body?.current ?? "";
-  const next = body?.next ?? "";
+  const current = typeof body?.current === "string" ? body.current : "";
+  const next = typeof body?.next === "string" ? body.next : "";
 
   if (!(await verifyPassword(current, user.salt, user.passwordHash))) {
     return NextResponse.json({ error: "Password attuale non corretta" }, { status: 403 });

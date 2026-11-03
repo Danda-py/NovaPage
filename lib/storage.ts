@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -12,8 +12,33 @@ import path from "node:path";
  */
 const WIDTHS = [400, 800, 1600];
 
+/** Nome di un file prodotto da `saveImage` (UUID più variante). */
+const UPLOAD_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:webp|jpe?g|png|gif)$/i;
+const UPLOAD_PATH = /^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:webp|jpe?g|png|gif)$/i;
+
 export function storageConfigured(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
+
+/**
+ * URL di un'immagine che l'app ha caricato: percorso locale oppure Blob Vercel.
+ * Serve alla chat, che deve accettare anche gli URL assoluti restituiti da Blob
+ * senza accettare link arbitrari scelti dal client.
+ */
+export function isManagedImageUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 600 || value.includes("..")) return false;
+  if (value.startsWith("/uploads/")) return UPLOAD_PATH.test(value);
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (!url.hostname.endsWith(".public.blob.vercel-storage.com")) return false;
+    const name = url.pathname.replace(/^\/uploads\//, "");
+    return url.pathname.startsWith("/uploads/") && UPLOAD_FILE.test(name);
+  } catch {
+    return false;
+  }
 }
 
 /** Il MIME dichiarato dal browser è solo un'etichetta: va confrontato coi byte. */
@@ -70,6 +95,41 @@ async function persist(name: string, body: Buffer): Promise<string> {
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, name), body);
   return `/uploads/${name}`;
+}
+
+/**
+ * Cancella le varianti di un'immagine caricata. È best-effort: un errore dello
+ * storage non deve far fallire l'eliminazione del sito o dell'account.
+ */
+export async function deleteStoredImages(urls: string[]): Promise<number> {
+  const candidates = new Set<string>();
+  for (const url of urls) {
+    if (!isManagedImageUrl(url)) continue;
+    const match = url.match(/^(.*)-\d+\.webp$/i);
+    if (match) {
+      for (const width of WIDTHS) candidates.add(`${match[1]}-${width}.webp`);
+    } else {
+      candidates.add(url);
+    }
+  }
+
+  let deleted = 0;
+  for (const url of candidates) {
+    try {
+      if (url.startsWith("/uploads/")) {
+        await unlink(path.join(process.cwd(), "public", url));
+        deleted += 1;
+        continue;
+      }
+      if (!storageConfigured()) continue;
+      const { del } = await import("@vercel/blob");
+      await del(url, { token: process.env.BLOB_READ_WRITE_TOKEN });
+      deleted += 1;
+    } catch {
+      // File già assente o storage non disponibile: si continua con gli altri.
+    }
+  }
+  return deleted;
 }
 
 /**

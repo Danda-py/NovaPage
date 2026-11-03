@@ -142,7 +142,7 @@ export function legalDocContent(
     title: "Termini d'uso",
     intro: `Condizioni d'uso della pagina pubblicata da ${owner} con NovaPage.`,
     sections: [
-      { heading: "Oggetto", body: [`Queste condizioni regolano la consultazione della pagina /s/${input.slug} e dei suoi contenuti.`] },
+      { heading: "Oggetto", body: [`Queste condizioni regolano la consultazione di questa pagina e dei suoi contenuti.`] },
       {
         heading: "Contenuti e responsabilità",
         body: [
